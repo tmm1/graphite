@@ -16,7 +16,7 @@ from ConfigParser import ConfigParser
 
 
 defaults = dict(
-  LOCAL_DATA_DIR="/opt/graphite/storage/whisper/",
+  LOCAL_DATA_DIR="/opt/graphite/storage/ceres/",
   USER="",
   MAX_CACHE_SIZE='inf',
   MAX_UPDATES_PER_SECOND=1000,
@@ -25,12 +25,13 @@ defaults = dict(
   LINE_RECEIVER_PORT=2003,
   PICKLE_RECEIVER_INTERFACE='0.0.0.0',
   PICKLE_RECEIVER_PORT=2004,
-  CACHE_QUERY_INTERFACE='0.0.0.0',
-  CACHE_QUERY_PORT=7002,
+  PICKLE_QUERY_INTERFACE='0.0.0.0',
+  PICKLE_QUERY_PORT=7002,
   LOG_UPDATES=True,
   ENABLE_AMQP=False,
   AMQP_VERBOSE=False,
   BIND_PATTERNS=['#'],
+  CLUSTER_MEMBERS=[],
 )
 
 
