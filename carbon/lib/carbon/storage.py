@@ -22,8 +22,9 @@ except ImportError:
   import pickle
 
 
-STORAGE_SCHEMAS_CONFIG = join(CONF_DIR, 'storage-schemas.conf')
-STORAGE_LISTS_DIR = join(CONF_DIR, 'lists')
+GRAPHITE_ROOT = os.environ['GRAPHITE_ROOT']
+STORAGE_SCHEMAS_CONFIG = join(GRAPHITE_ROOT, 'conf', 'storage-schemas.conf')
+STORAGE_LISTS_DIR = join(GRAPHITE_ROOT, 'storage', 'lists')
 
 
 def getFilesystemPath(metric):
