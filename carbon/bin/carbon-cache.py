@@ -87,7 +87,11 @@ if action == 'stop':
   os.unlink(options.pidfile)
 
   print 'Sending kill signal to pid %d' % pid
-  os.kill(pid, 15)
+  try:
+    os.kill(pid, 15)
+  except OSError, e:
+    pass
+
   raise SystemExit(0)
 
 
