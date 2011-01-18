@@ -1,6 +1,6 @@
 import os, time, fnmatch, socket, errno
 from os.path import isdir, isfile, join, exists, splitext, basename, realpath
-from ceres import CeresNode, TimeSeriesData
+from ceres import CeresNode
 from graphite.remote_storage import RemoteStore
 from django.conf import settings
 
@@ -260,9 +260,7 @@ class WhisperFile(Leaf):
       self.real_metric = relative_real_fs_path[ :-len(self.extension) ].replace('/', '.')
 
   def fetch(self, startTime, endTime):
-    (timeInfo, values) = whisper.fetch(self.fs_path, startTime, endTime)
-    (start, end, step) = timeInfo
-    return TimeSeriesData(start, end, step, values)
+    return whisper.fetch(self.fs_path, startTime, endTime)
 
 
 
@@ -306,12 +304,11 @@ class RRDDataSource(Leaf):
     endString = time.strftime("%H:%M_%Y%m%d", time.localtime(endTime))
 
     (timeInfo, columns, rows) = rrdtool.fetch(self.fs_path,'AVERAGE','-s' + startString,'-e' + endString)
-    (start, end, step) = timeInfo
     colIndex = list(columns).index(self.name)
     rows.pop() #chop off the latest value because RRD returns crazy last values sometimes
     values = (row[colIndex] for row in rows)
 
-    return TimeSeriesData(start, end, step, values)
+    return (timeInfo, values)
 
 
 
@@ -334,7 +331,9 @@ class CeresDirectory(Leaf):
 
 
   def fetch(self, fromTime, untilTime):
-    return self.node.read(fromTime, untilTime)
+    data = self.node.read(fromTime, untilTime)
+    timeInfo = (data.startTime, data.endTime, data.timeStep)
+    return (timeInfo, data.values)
 
 
 
