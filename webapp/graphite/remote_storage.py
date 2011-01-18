@@ -41,7 +41,7 @@ class FindRequest:
     self.store = store
     self.query = query
     self.connection = None
-    self.cacheKey = compactHash('find:%s:%s' % (self.store.host, query))
+    self.cacheKey = compactHash('find:%s:%s' % (self.store.host, query.pattern))
     self.cachedResults = None
 
 
@@ -57,8 +57,14 @@ class FindRequest:
     query_params = [
       ('local', '1'),
       ('format', 'pickle'),
-      ('query', self.query),
+      ('query', self.query.pattern),
     ]
+    if self.query.startTime:
+      query_params.append( ('from', self.query.startTime) )
+
+    if self.query.endTime:
+      query_params.append( ('until', self.query.endTime) )
+
     query_string = urlencode(query_params)
 
     try:
