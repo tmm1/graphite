@@ -32,6 +32,13 @@ def find_view(request):
   format = request.REQUEST.get('format', 'treejson')
   local_only = int( request.REQUEST.get('local', 0) )
   wildcards = int( request.REQUEST.get('wildcards', 0) )
+  fromTime = int( request.REQUEST.get('from', -1) )
+  untilTime = int( request.REQUEST.get('until', -1) )
+
+  if fromTime == -1:
+    fromTime = None
+  if untilTime == -1:
+    untilTime = None
 
   try:
     query = str( request.REQUEST['query'] )
@@ -48,7 +55,7 @@ def find_view(request):
   else:
     store = STORE
 
-  matches = list( store.find(query) )
+  matches = list( store.find(query, fromTime, untilTime) )
 
   log.info('find_view query=%s local_only=%s matches=%d' % (query, local_only, len(matches)))
   matches.sort(key=lambda node: node.name)
