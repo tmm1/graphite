@@ -14,7 +14,7 @@ limitations under the License."""
 
 import os, re
 from os.path import join, exists
-from carbon.conf import OrderedConfigParser, Settings, settings
+from carbon.conf import OrderedConfigParser
 
 try:
   import cPickle as pickle
@@ -25,10 +25,6 @@ except ImportError:
 GRAPHITE_ROOT = os.environ['GRAPHITE_ROOT']
 STORAGE_SCHEMAS_CONFIG = join(GRAPHITE_ROOT, 'conf', 'storage-schemas.conf')
 STORAGE_LISTS_DIR = join(GRAPHITE_ROOT, 'storage', 'lists')
-
-
-def getFilesystemPath(metric):
-  return join(settings.LOCAL_DATA_DIR, metric.replace('.','/')) + '.wsp'
 
 
 UnitMultipliers = {
@@ -70,39 +66,44 @@ def parseRetentionDefinition(retentionDef):
 
 
 class Schema:
+  def __init__(self, name, archives):
+    self.name = name
+    self.archives = sorted(archives)
+    self.timeStep = self.archives[0].secondsPerPoint
+
+
   def test(self, metric):
     raise NotImplementedError()
+
 
   def matches(self, metric):
     return bool( self.test(metric) )
 
 
-class DefaultSchema(Schema):
-  def __init__(self, name, archives):
-    self.name = name
-    self.archives = archives
 
+class DefaultSchema(Schema):
   def test(self, metric):
     return True
 
 
+
 class PatternSchema(Schema):
-  def __init__(self, name, pattern, archives):
-    self.name = name
+  def __init__(self, name, archives, pattern):
+    Schema.__init__(self, name, archives)
     self.pattern = pattern
     self.regex = re.compile(pattern)
-    self.archives = archives
+
 
   def test(self, metric):
     return self.regex.search(metric)
 
 
+
 class ListSchema(Schema):
-  def __init__(self, name, listName, archives):
-    self.name = name
+  def __init__(self, name, archives, listName):
+    Schema.__init__(self, name, archives)
     self.listName = listName
-    self.archives = archives
-    self.path = join(WHITELISTS_DIR, listName)
+    self.path = join(STORAGE_LISTS_DIR, listName)
 
     if exists(self.path):
       self.mtime = os.stat(self.path).st_mtime
@@ -113,6 +114,7 @@ class ListSchema(Schema):
     else:
       self.mtime = 0
       self.members = frozenset()
+
 
   def test(self, metric):
     if exists(self.path):
@@ -129,7 +131,7 @@ class ListSchema(Schema):
 
 
 class Archive:
-  def __init__(self,secondsPerPoint,points):
+  def __init__(self, secondsPerPoint, points):
     self.secondsPerPoint = int( secondsPerPoint )
     self.points = int( points )
 
@@ -151,6 +153,7 @@ def loadStorageSchemas():
   config.read(STORAGE_SCHEMAS_CONFIG)
 
   for section in config.sections():
+    schemaName = section
     options = dict( config.items(section) )
     matchAll = options.get('match-all')
     pattern = options.get('pattern')
@@ -160,16 +163,16 @@ def loadStorageSchemas():
     archives = [ Archive.fromString(s) for s in retentions ]
 
     if matchAll:
-      mySchema = DefaultSchema(section, archives)
+      mySchema = DefaultSchema(schemaName, archives)
 
     elif pattern:
-      mySchema = PatternSchema(section, pattern, archives)
+      mySchema = PatternSchema(schemaName, archives, pattern)
 
     elif listName:
-      mySchema = ListSchema(section, listName, archives)
+      mySchema = ListSchema(schemaName, archives, listName)
 
     else:
-      raise ValueError('schema "%s" has no pattern or list parameter configured' % section)
+      raise ValueError('schema "%s" has no pattern or list parameter configured' % schemaName)
 
     schemaList.append( mySchema )
 
