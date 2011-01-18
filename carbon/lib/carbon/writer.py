@@ -35,18 +35,18 @@ def writeCachedDataPoints():
   for (metric, datapoints) in MetricCache.drain():
 
     if not Tree.hasNode(metric):
-      timeStep = None
+      matchingSchema = None
 
       for schema in schemas:
         if schema.matches(metric):
-          timeStep = schema.timeStep
+          matchingSchema = schema
           break
 
-      if timeStep is None:
+      if matchingSchema is None:
         raise Exception("No storage schema matched the metric '%s', check your storage-schemas.conf file." % metric)
 
-      Tree.createNode(metric, timeStep=timeStep)
-      log.creates("created new metric %s with timeStep=%d" % (metric, timeStep))
+      Tree.createNode(metric, **matchingSchema.configuration)
+      log.creates("created new metric %s with schema=%s" % (metric, matchingSchema.configurationString))
       increment('creates')
 
     try:

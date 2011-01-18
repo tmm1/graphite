@@ -69,7 +69,11 @@ class Schema:
   def __init__(self, name, archives):
     self.name = name
     self.archives = sorted(archives)
-    self.timeStep = self.archives[0].secondsPerPoint
+    self.configuration = {
+      'archives' : [ archive.config for archive in self.archives ],
+      'timeStep' : self.archives[0].secondsPerPoint,
+    }
+    self.configurationString = ' '.join( '%s=%s' % item for item in sorted( self.configuration.items() ) )
 
 
   def test(self, metric):
@@ -134,6 +138,7 @@ class Archive:
   def __init__(self, secondsPerPoint, points):
     self.secondsPerPoint = int( secondsPerPoint )
     self.points = int( points )
+    self.config = (self.secondsPerPoint, self.points)
 
 
   def getTuple(self):
@@ -144,6 +149,10 @@ class Archive:
   def fromString(retentionDef):
     (secondsPerPoint, points) = parseRetentionDefinition(retentionDef)
     return Archive(secondsPerPoint, points)
+
+
+  def __cmp__(self, other):
+    return cmp(self.config, other.config)
 
 
 
