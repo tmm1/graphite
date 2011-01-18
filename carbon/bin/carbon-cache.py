@@ -127,7 +127,7 @@ settings.readFrom(options.config, 'carbon')
 
 # Import application components
 from carbon.log import logToStdout, logToDir
-from carbon.receiver import MetricLineReceiver, MetricPickleReceiver
+from carbon.listeners import MetricLineReceiver, MetricPickleReceiver
 from carbon.query import PickleQueryHandler
 from carbon.cache import MetricCache
 from carbon.writer import startWriter

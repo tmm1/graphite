@@ -115,7 +115,7 @@ settings.readFrom(options.config, 'relay')
 
 # Import application components
 from carbon.log import logToStdout, logToDir
-from carbon.receiver import MetricLineReceiver, MetricPickleReceiver
+from carbon.listeners import MetricLineReceiver, MetricPickleReceiver
 from carbon.relay import startRelaying, relay
 from carbon.events import metricReceived
 from carbon.instrumentation import startRecordingRelayMetrics
