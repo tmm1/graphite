@@ -42,29 +42,19 @@ STORAGE_DIR = join(ROOT_DIR, 'storage')
 LOG_DIR = join(STORAGE_DIR, 'log', 'carbon-cache')
 LIB_DIR = join(ROOT_DIR, 'lib')
 CONF_DIR = join(ROOT_DIR, 'conf')
-__builtins__.CONF_DIR = CONF_DIR # evil I know, but effective.
 
 sys.path.insert(0, LIB_DIR)
+os.environ['GRAPHITE_ROOT'] = ROOT_DIR
 
 # Capture useful debug info for this commonly reported problem
 try:
   import carbon
 except ImportError:
-  print 'Failed to import carbon, debug information follows.'
+  print 'Failed to import carbon package, debug information follows.'
   print 'pwd=%s' % os.getcwd()
   print 'sys.path=%s' % sys.path
   print '__file__=%s' % __file__
   sys.exit(1)
-
-
-# Import application components
-from carbon.conf import settings
-from carbon.log import logToStdout, logToDir
-from carbon.listeners import MetricLineReceiver, MetricPickleReceiver, CacheQueryHandler, startListener
-from carbon.cache import MetricCache
-from carbon.writer import startWriter
-from carbon.instrumentation import startRecordingCacheMetrics
-from carbon.events import metricReceived
 
 
 # Parse command line options
@@ -132,8 +122,21 @@ if exists(options.pidfile):
   raise SystemExit(1)
 
 
-# Read config (we want failures to occur before daemonizing)
-settings.readFrom(options.config, 'cache')
+# Load settings
+from carbon.conf import settings
+settings.readFrom(options.config, 'carbon')
+
+
+# Import application components
+from carbon.log import logToStdout, logToDir
+from carbon.receiver import MetricLineReceiver, MetricPickleReceiver
+from carbon.query import PickleQueryHandler
+from carbon.cache import MetricCache
+from carbon.writer import startWriter
+from carbon.instrumentation import startRecordingCacheMetrics
+from carbon.events import metricReceived
+from carbon.util import daemonize, dropprivs, startListener
+
 
 use_amqp = settings.get("ENABLE_AMQP", False)
 if use_amqp:
@@ -159,7 +162,6 @@ else:
   if settings.USER:
     print "Dropping privileges to become the user %s" % settings.USER
 
-  from carbon.util import daemonize, dropprivs
   daemonize()
 
   pidfile = open(options.pidfile, 'w')
@@ -183,7 +185,7 @@ else:
 metricReceived.installHandler(MetricCache.store)
 startListener(settings.LINE_RECEIVER_INTERFACE, settings.LINE_RECEIVER_PORT, MetricLineReceiver)
 startListener(settings.PICKLE_RECEIVER_INTERFACE, settings.PICKLE_RECEIVER_PORT, MetricPickleReceiver)
-startListener(settings.CACHE_QUERY_INTERFACE, settings.CACHE_QUERY_PORT, CacheQueryHandler)
+startListener(settings.PICKLE_QUERY_INTERFACE, settings.PICKLE_QUERY_PORT, PickleQueryHandler)
 
 if use_amqp:
   amqp_listener.startReceiver(amqp_host, amqp_port, amqp_user, amqp_password,
