@@ -32,25 +32,15 @@ from twisted.internet import reactor
 
 
 # Figure out where we're installed
-BIN_DIR = dirname(__file__)
+BIN_DIR = dirname( os.path.abspath(__file__) )
 ROOT_DIR = dirname(BIN_DIR)
 STORAGE_DIR = join(ROOT_DIR, 'storage')
 LOG_DIR = join(STORAGE_DIR, 'log', 'carbon-relay')
 LIB_DIR = join(ROOT_DIR, 'lib')
 CONF_DIR = join(ROOT_DIR, 'conf')
-__builtins__.CONF_DIR = CONF_DIR
 
 sys.path.insert(0, LIB_DIR)
-
-
-# Import application components
-from carbon.conf import settings
-from carbon.log import logToStdout, logToDir
-from carbon.listeners import MetricLineReceiver, MetricPickleReceiver, startListener
-from carbon.relay import startRelaying, relay
-from carbon.events import metricReceived
-from carbon.instrumentation import startRecordingRelayMetrics
-
+os.environ['GRAPHITE_ROOT'] = ROOT_DIR
 
 # Parse command line options
 parser = optparse.OptionParser(usage='%prog [options] <start|stop|status>')
@@ -119,19 +109,28 @@ if exists(options.pidfile):
 
 
 # Read config (we want failures to occur before daemonizing)
+from carbon.conf import settings
 settings.readFrom(options.config, 'relay')
+
+
+# Import application components
+from carbon.log import logToStdout, logToDir
+from carbon.receiver import MetricLineReceiver, MetricPickleReceiver
+from carbon.relay import startRelaying, relay
+from carbon.events import metricReceived
+from carbon.instrumentation import startRecordingRelayMetrics
+from carbon.util import daemonize, startListener
 
 
 # --debug
 if options.debug:
   logToStdout()
+
 else:
   if not isdir(options.logdir):
     os.makedirs(options.logdir)
 
-  from carbon.util import daemonize
   daemonize()
-  logToDir(options.logdir)
 
   pidfile = open(options.pidfile, 'w')
   pidfile.write( str(os.getpid()) )
@@ -142,6 +141,8 @@ else:
       os.unlink(options.pidfile)
 
   atexit.register(shutdown)
+
+  logToDir(options.logdir)
 
 
 # Configure application components
@@ -155,6 +156,8 @@ startRecordingRelayMetrics()
 
 
 # Run the twisted reactor
+print "%s running with pid %d" % (program, os.getpid())
+
 if options.profile:
   import cProfile
 

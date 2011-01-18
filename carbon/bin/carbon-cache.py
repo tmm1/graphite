@@ -15,7 +15,6 @@ limitations under the License."""
 
 import sys
 import os
-import socket
 import pwd
 import optparse
 import atexit
@@ -23,7 +22,6 @@ from os.path import basename, dirname, exists, join, isdir
 
 
 program = basename( sys.argv[0] )
-hostname = socket.gethostname().split('.')[0]
 os.umask(022)
 
 # Initialize twisted
@@ -198,7 +196,7 @@ startRecordingCacheMetrics()
 
 
 # Run the twisted reactor
-print "%s running" % program
+print "%s running with pid %d" % (program, os.getpid())
 
 if options.profile:
   import cProfile
