@@ -26,46 +26,11 @@ except ImportError:
   import pickle
 
 
-def context_view(request):
-  if request.method == 'GET':
-    contexts = []
-
-    if not 'metric' not in request.GET:
-      return HttpResponse('{ "error" : "missing required parameter \"metric\"" }', mimetype='text/json')
-
-    for metric in request.GET.getlist('metric'):
-      try:
-        context = STORE.get(metric).context
-      except:
-        contexts.append({ 'metric' : metric, 'error' : 'failed to retrieve context', 'traceback' : traceback.format_exc() })
-      else:
-        contexts.append({ 'metric' : metric, 'context' : context })
-
-    content = json.dumps( { 'contexts' : contexts } )
-    return HttpResponse(content, mimetype='text/json')
-
-  elif request.method == 'POST':
-
-    if 'metric' not in request.POST:
-      return HttpResponse('{ "error" : "missing required parameter \"metric\"" }', mimetype='text/json')
-
-    newContext = dict( item for item in request.POST.items() if item[0] != 'metric' )
-
-    for metric in request.POST.getlist('metric'):
-      STORE.get(metric).updateContext(newContext)
-
-    return HttpResponse('{ "success" : true }', mimetype='text/json')
-
-  else:
-    return HttpResponseBadRequest("invalid method, must be GET or POST")
-
-
 def find_view(request):
   "View for finding metrics matching a given pattern"
   profile = getProfile(request)
   format = request.REQUEST.get('format', 'treejson')
   local_only = int( request.REQUEST.get('local', 0) )
-  contexts = int( request.REQUEST.get('contexts', 0) )
   wildcards = int( request.REQUEST.get('wildcards', 0) )
 
   try:
@@ -89,11 +54,11 @@ def find_view(request):
   matches.sort(key=lambda node: node.name)
 
   if format == 'treejson':
-    content = tree_json(matches, base_path, wildcards=profile.advancedUI or wildcards, contexts=contexts)
+    content = tree_json(matches, base_path, wildcards=profile.advancedUI or wildcards)
     response = HttpResponse(content, mimetype='text/json')
 
   elif format == 'pickle':
-    content = pickle_nodes(matches, contexts=contexts)
+    content = pickle_nodes(matches)
     response = HttpResponse(content, mimetype='application/pickle')
 
   elif format == 'completer':
@@ -111,7 +76,7 @@ def find_view(request):
   return response
 
 
-def tree_json(nodes, base_path, wildcards=False, contexts=False):
+def tree_json(nodes, base_path, wildcards=False):
   results = []
 
   branchNode = {
@@ -149,11 +114,6 @@ def tree_json(nodes, base_path, wildcards=False, contexts=False):
       'id' : base_path + str(node.name),
     }
 
-    if contexts:
-      resultNode['context'] = node.context
-    else:
-      resultNode['context'] = {}
-
     if node.isLeaf():
       resultNode.update(leafNode)
     else:
@@ -164,12 +124,8 @@ def tree_json(nodes, base_path, wildcards=False, contexts=False):
   return json.dumps(results)
 
 
-def pickle_nodes(nodes, contexts=False):
-  if contexts:
-    return pickle.dumps([ { 'metric_path' : n.metric_path, 'isLeaf' : n.isLeaf(), 'context' : n.context } for n in nodes ])
-
-  else:
-    return pickle.dumps([ { 'metric_path' : n.metric_path, 'isLeaf' : n.isLeaf() } for n in nodes ])
+def pickle_nodes(nodes):
+  return pickle.dumps([ { 'metric_path' : n.metric_path, 'isLeaf' : n.isLeaf() } for n in nodes ])
 
 
 def any(iterable): #python2.4 compatibility

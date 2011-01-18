@@ -37,20 +37,18 @@ CLUSTER_SERVERS = []
 sys.path.insert(0, THIRDPARTY_DIR)
 sys.path.insert(0, WEBAPP_DIR)
 
-DATA_DIRS = []
+DATA_DIRS = [CERES_DIR]
 try:
   import ceres
-  DATA_DIRS.append(CERES_DIR)
 except ImportError:
-  print >> sys.stderr, "WARNING: ceres module could not be loaded, ceres support disabled"
+  print >> sys.stderr, "FATAL ERROR: ceres module could not be loaded"
+  raise
 
 try:
   import whisper
   DATA_DIRS.append(WHISPER_DIR)
 except ImportError:
   print >> sys.stderr, "WARNING: whisper module could not be loaded, whisper support disabled"
-
-assert DATA_DIRS, "Neither whisper nor ceres is available, please verify your installation and python import path."
 
 try:
   import rrdtool
