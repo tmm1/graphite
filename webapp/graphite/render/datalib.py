@@ -17,7 +17,7 @@ import struct
 import time
 from django.conf import settings
 from graphite.logger import log
-from graphite.storage import STORE
+from graphite.storage import STORE, CeresDirectory
 
 try:
   import cPickle as pickle
@@ -27,11 +27,11 @@ except ImportError:
 
 class TimeSeries(list):
   def __init__(self, name, start, end, step, values, consolidate='average'):
+    list.__init__(self, values)
     self.name = name
     self.start = start
     self.end = end
     self.step = step
-    list.__init__(self,values)
     self.consolidationFunc = consolidate
     self.valuesPerPoint = 1
     self.options = {}
@@ -198,23 +198,44 @@ def fetchData(requestContext, pathExpr):
     pathExpr = pathExpr[9:]
 
   seriesList = []
-  startTime = requestContext['startTime']
-  endTime = requestContext['endTime']
+  startTime = timestamp( requestContext['startTime'] )
+  endTime   = timestamp( requestContext['endTime'] )
 
   for dbFile in STORE.find(pathExpr):
     log.metric_access(dbFile.metric_path)
-    getCacheResults = CarbonLink.sendRequest(dbFile.real_metric)
-    dbResults = dbFile.fetch( timestamp(startTime), timestamp(endTime) )
-    results = mergeResults(dbResults, getCacheResults())
+    doCacheLookup = isinstance(dbFile, CeresDirectory)
+
+    if doCacheLookup:
+      getCacheResults = CarbonLink.sendRequest(dbFile.real_metric)
+
+    dbResults = dbFile.fetch(startTime, endTime)
+
+    if doCacheLookup:
+      results = mergeResults(dbResults, getCacheResults())
+    else:
+      results = dbResults
 
     if not results:
       continue
 
-    (timeInfo,values) = results
-    (start,end,step) = timeInfo
+    (timeInfo, values) = results
+    (start, end, step) = timeInfo
     series = TimeSeries(dbFile.metric_path, start, end, step, values)
     series.pathExpression = pathExpr #hack to pass expressions through to render functions
     seriesList.append(series)
+
+  # Prune empty series with duplicate metric paths to avoid showing empty graph elements for old whisper data
+  names = set([ series.name for series in seriesList ])
+  for name in names:
+    series_with_duplicate_names = [ series for series in seriesList if series.name == name ]
+    empty_duplicates = [ series for series in series_with_duplicate_names if not nonempty(series) ]
+
+    #assert False, "names=%s   name=%s   dupes=%s   empty_dupes=%s" % (names, name, series_with_duplicate_names, empty_duplicates)
+    if series_with_duplicate_names == empty_duplicates and len(empty_duplicates) > 0: # if they're all empty
+      empty_duplicates.pop() # make sure we leave one in seriesList
+
+    for series in empty_duplicates:
+      seriesList.remove(series)
 
   return seriesList
 
@@ -245,3 +266,11 @@ def mergeResults(dbResults, cacheResults):
 def timestamp(datetime):
   "Convert a datetime object into epoch time"
   return time.mktime( datetime.timetuple() )
+
+
+def nonempty(series):
+  for value in series:
+    if value is not None:
+      return True
+
+  return False
