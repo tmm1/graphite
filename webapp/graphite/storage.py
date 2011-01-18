@@ -84,9 +84,8 @@ class Store:
     # Search locally
     for directory in self.directories:
       for match in find(directory, query):
-        if match.metric_path not in found:
-          yield match
-          found.add(match.metric_path)
+        yield match
+        found.add(match.metric_path) # we're intentionally allowing dupes to be found locally, just not remotely (to combine wsp/ceres data)
 
     # Gather remote search results
     for request in remote_requests:
