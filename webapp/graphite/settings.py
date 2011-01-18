@@ -26,6 +26,7 @@ CONTENT_DIR = WEBAPP_DIR + 'content/'
 STORAGE_DIR = GRAPHITE_ROOT + 'storage/'
 WHISPER_DIR = STORAGE_DIR + 'whisper/'
 RRD_DIR = STORAGE_DIR + 'rrd/'
+CERES_DIR = STORAGE_DIR + 'ceres/'
 LISTS_DIR = STORAGE_DIR + 'lists/'
 INDEX_FILE = STORAGE_DIR + 'index'
 WHITELIST_FILE = LISTS_DIR + 'whitelist'
@@ -36,11 +37,26 @@ CLUSTER_SERVERS = []
 sys.path.insert(0, THIRDPARTY_DIR)
 sys.path.insert(0, WEBAPP_DIR)
 
+DATA_DIRS = []
+try:
+  import ceres
+  DATA_DIRS.append(CERES_DIR)
+except ImportError:
+  print >> sys.stderr, "WARNING: ceres module could not be loaded, ceres support disabled"
+
+try:
+  import whisper
+  DATA_DIRS.append(WHISPER_DIR)
+except ImportError:
+  print >> sys.stderr, "WARNING: whisper module could not be loaded, whisper support disabled"
+
+assert DATA_DIRS, "Neither whisper nor ceres is available, please verify your installation and python import path."
+
 try:
   import rrdtool
-  DATA_DIRS = [WHISPER_DIR, RRD_DIR]
-except:
-  DATA_DIRS = [WHISPER_DIR]
+  DATA_DIRS.append(RRD_DIR)
+except ImportError:
+  pass
 
 
 #Memcache settings
