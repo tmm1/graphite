@@ -122,7 +122,7 @@ if exists(options.pidfile):
 
 # Load settings
 from carbon.conf import settings
-settings.readFrom(options.config, 'carbon')
+settings.readFrom(options.config, 'cache')
 
 
 # Import application components

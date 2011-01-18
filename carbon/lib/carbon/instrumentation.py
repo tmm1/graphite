@@ -3,7 +3,6 @@ import socket
 from resource import getrusage, RUSAGE_SELF
 from twisted.internet.task import LoopingCall
 from carbon.cache import MetricCache
-from carbon.relay import relay, RelayServers
 
 
 stats = {}
@@ -127,3 +126,8 @@ def send(metric, value):
   fullMetric = 'carbon.relays.%s.%s' % (HOSTNAME, metric)
   datapoint = (time.time(), value)
   relay(fullMetric, datapoint)
+
+
+
+# Avoid import circularity
+from carbon.relay import relay, RelayServers

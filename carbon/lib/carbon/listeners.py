@@ -1,6 +1,5 @@
 from twisted.protocols.basic import LineOnlyReceiver, Int32StringReceiver
 from carbon.cache import MetricCache
-from carbon.instrumentation import increment
 from carbon.events import metricReceived
 from carbon.util import LoggingMixin
 from carbon import log
@@ -57,3 +56,8 @@ class CacheQueryHandler(LoggingMixin, Int32StringReceiver):
     response = pickle.dumps(values, protocol=-1)
     self.sendString(response)
     increment('cacheQueries')
+
+
+
+# Avoid import circularity
+from carbon.instrumentation import increment
