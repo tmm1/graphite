@@ -60,10 +60,6 @@ def listener(message, **context):
   context['type'] = 'listener'
   msg(message, **context)
 
-def relay(message, **context):
-  context['type'] = 'relay'
-  msg(message, **context)
-
 def query(message, **context):
   context['type'] = 'query'
   msg(message, **context)

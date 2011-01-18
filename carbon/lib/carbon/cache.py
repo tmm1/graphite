@@ -16,6 +16,7 @@ from carbon.conf import settings
 from carbon import log
 
 
+
 class MetricCache(dict):
   def __init__(self):
     self.size = 0
@@ -51,8 +52,18 @@ class MetricCache(dict):
     return datapoints
 
 
-  def counts(self):
-    return [ (metric, len(datapoints)) for (metric, datapoints) in self.items() ]
+  def drain(self):
+    "Removes and generates metrics in order of most cached values to least"
+    metrics = [ (metric, len(datapoints)) for metric,datapoints in self.items() ]
+    metrics.sort(key=lambda item: item[1], reverse=True) # by queue size, descending
+
+    for metric, queueSize in metrics:
+      try: # metrics can momentarily disappear due to the implementation of our store() method
+        datapoints = self.pop(metric)
+      except KeyError:
+        continue # we simply move on to the next metric when this race condition occurs
+
+      yield (metric, datapoints)
 
   
 

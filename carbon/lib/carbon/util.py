@@ -1,6 +1,10 @@
 import sys
 import os
 import pwd
+from twisted.internet.protocol import Factory
+from twisted.internet.error import ConnectionDone
+from twisted.internet import reactor
+from carbon import log
 
 
 def daemonize():
@@ -20,3 +24,22 @@ def dropprivs(user):
   os.setregid(gid,gid)
   os.setreuid(uid,uid)
   return (uid,gid)
+
+
+class LoggingMixin:
+  def connectionMade(self):
+    self.peer = self.transport.getPeer()
+    self.peerAddr = "%s:%d" % (self.peer.host, self.peer.port)
+    log.listener("%s connection with %s established" % (self.__class__.__name__, self.peerAddr))
+
+  def connectionLost(self, reason):
+    if reason.check(ConnectionDone):
+      log.listener("%s connection with %s closed cleanly" % (self.__class__.__name__, self.peerAddr))
+    else:
+      log.listener("%s connection with %s lost: %s" % (self.__class__.__name__, self.peerAddr, reason.value))
+
+
+def startListener(interface, port, protocol):
+  factory = Factory()
+  factory.protocol = protocol
+  return reactor.listenTCP( int(port), factory, interface=interface )
