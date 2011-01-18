@@ -127,8 +127,7 @@ settings.readFrom(options.config, 'carbon')
 
 # Import application components
 from carbon.log import logToStdout, logToDir
-from carbon.listeners import MetricLineReceiver, MetricPickleReceiver
-from carbon.query import PickleQueryHandler
+from carbon.listeners import MetricLineReceiver, MetricPickleReceiver, CacheQueryHandler
 from carbon.cache import MetricCache
 from carbon.writer import startWriter
 from carbon.instrumentation import startRecordingCacheMetrics
@@ -183,7 +182,7 @@ else:
 metricReceived.installHandler(MetricCache.store)
 startListener(settings.LINE_RECEIVER_INTERFACE, settings.LINE_RECEIVER_PORT, MetricLineReceiver)
 startListener(settings.PICKLE_RECEIVER_INTERFACE, settings.PICKLE_RECEIVER_PORT, MetricPickleReceiver)
-startListener(settings.PICKLE_QUERY_INTERFACE, settings.PICKLE_QUERY_PORT, PickleQueryHandler)
+startListener(settings.CACHE_QUERY_INTERFACE, settings.CACHE_QUERY_PORT, CacheQueryHandler)
 
 if use_amqp:
   amqp_listener.startReceiver(amqp_host, amqp_port, amqp_user, amqp_password,
