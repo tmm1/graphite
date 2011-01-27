@@ -56,9 +56,8 @@ def find_view(request):
     store = STORE
 
   matches = list( store.find(query, fromTime, untilTime) )
-
-  log.info('find_view query=%s local_only=%s matches=%d' % (query, local_only, len(matches)))
   matches.sort(key=lambda node: node.name)
+  log.info("FindRequest: query=%s from=%s until=%s local_only=%s, found %d matches" % (query, fromTime, untilTime, local_only, len(matches)))
 
   if format == 'treejson':
     content = tree_json(matches, base_path, wildcards=profile.advancedUI or wildcards)

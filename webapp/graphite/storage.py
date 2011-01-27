@@ -2,6 +2,7 @@ import os, time, fnmatch, socket, errno
 from os.path import isdir, isfile, join, exists, splitext, basename, realpath
 from ceres import CeresNode
 from graphite.remote_storage import RemoteStore
+from graphite.logger import log
 from django.conf import settings
 
 try:
@@ -30,10 +31,10 @@ DATASOURCE_DELIMETER = '::RRD_DATASOURCE::'
 
 
 class Store:
-  def __init__(self, directories=[], remote_hosts=[]):
+  def __init__(self, directories=[], hosts=[]):
     self.directories = directories
-    self.remote_hosts = remote_hosts
-    self.remote_stores = [ RemoteStore(host) for host in remote_hosts if not is_local_interface(host) ]
+    self.remote_hosts = [host for host in hosts if not is_local_interface(host) ]
+    self.remote_stores = [ RemoteStore(host) for host in self.remote_hosts ]
 
     if not (directories or remote_hosts):
       raise ValueError("directories and remote_hosts cannot both be empty")
@@ -50,6 +51,7 @@ class Store:
 
   def find(self, pattern, startTime=None, endTime=None):
     query = Query(pattern, startTime, endTime)
+    log.info("Store.find(%s) remote_hosts=%s" % (query, self.remote_hosts))
 
     if query.isExact:
       match = self.find_first(query)
@@ -104,6 +106,20 @@ class Query:
     self.pattern = pattern
     self.startTime = startTime
     self.endTime = endTime
+
+
+  def __repr__(self):
+    if self.startTime is None:
+      startString = '*'
+    else:
+      startString = time.ctime(self.startTime)
+
+    if self.endTime is None:
+      endString = '*'
+    else:
+      endString = time.ctime(self.endTime)
+
+    return '<Query: %s from %s until %s>' % (self.pattern, startString, endString)
 
 
 
@@ -338,4 +354,4 @@ class CeresDirectory(Leaf):
 
 # Exposed Storage API
 LOCAL_STORE = Store(settings.DATA_DIRS)
-STORE = Store(settings.DATA_DIRS, remote_hosts=settings.CLUSTER_SERVERS)
+STORE = Store(settings.DATA_DIRS, hosts=settings.CLUSTER_SERVERS)

@@ -1,10 +1,12 @@
 import socket
 import time
 import httplib
+import traceback
 from urllib import urlencode
+from graphite.render.hashing import compactHash
+from graphite.logger import log
 from django.core.cache import cache
 from django.conf import settings
-from graphite.render.hashing import compactHash
 
 try:
   import cPickle as pickle
@@ -41,14 +43,16 @@ class FindRequest:
     self.store = store
     self.query = query
     self.connection = None
-    self.cacheKey = compactHash('find:%s:%s' % (self.store.host, query.pattern))
+    self.cacheKey = compactHash('find:%s:%s' % (self.store.host, query))
     self.cachedResults = None
 
 
   def send(self):
+    log.info("FindRequest.send(host=%s, query=%s) called" % (self.store.host, self.query))
     self.cachedResults = cache.get(self.cacheKey)
 
     if self.cachedResults:
+      log.info("FindRequest.send(host=%s, query=%s) returning cached results" % (self.store.host, self.query))
       return
 
     self.connection = HTTPConnectionWithTimeout(self.store.host)
@@ -70,6 +74,7 @@ class FindRequest:
     try:
       self.connection.request('GET', '/metrics/find/?' + query_string)
     except:
+      log.info("FindRequest.send(host=%s, query=%s) exception during request\n%s" % (self.store.host, self.query, traceback.format_exc()))
       self.store.fail()
       if not self.suppressErrors:
         raise
@@ -89,6 +94,7 @@ class FindRequest:
       results = pickle.loads(result_data)
 
     except:
+      log.info("FindRequest.get_results(host=%s, query=%s) exception processing response" % (self.store.host, self.query))
       self.store.fail()
       if not self.suppressErrors:
         raise
@@ -115,8 +121,8 @@ class RemoteNode:
 
 
   def fetch(self, startTime, endTime):
-    if not self.__isLeaf:
-      return []
+    if not self.isLeaf:
+      raise Exception("Cannot fetch a non-leaf node")
 
     query_params = [
       ('target', self.metric_path),
@@ -126,12 +132,18 @@ class RemoteNode:
     ]
     query_string = urlencode(query_params)
 
+    log.info("RemoteNode(%s).fetch(http://%s/render/?%s) sending request" % (self. metric_path, self.store.host, query_string))
     connection = HTTPConnectionWithTimeout(self.store.host)
     connection.timeout = self.store.timeout
     connection.request('GET', '/render/?' + query_string)
     response = connection.getresponse()
-    assert response.status == 200, "Failed to retrieve remote data: %d %s" % (response.status, response.reason)
+
+    if response.status != 200:
+      log.info("RemoteNode(%s).fetch(http://%s/render/?%s) got error response %d %s" % (self. metric_path, self.store.host, query_string, response.status, response.reason))
+      raise Exception("Failed to retrieve remote data: %d %s" % (response.status, response.reason))
+
     rawData = response.read()
+    log.info("RemoteNode(%s).fetch(http://%s/render/?%s) got %d byte response" % (self. metric_path, self.store.host, query_string, len(rawData)))
 
     seriesList = pickle.loads(rawData)
     assert len(seriesList) == 1, "Invalid result: seriesList=%s" % str(seriesList)
