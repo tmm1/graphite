@@ -12,11 +12,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License."""
 
-from graphite.render.datalib import TimeSeries, timestamp
-from graphite.render.attime import parseTimeOffset
-from itertools import izip
+import time
 import math
 import re
+from itertools import izip
+from graphite.render.datalib import TimeSeries
+from graphite.render.attime import parseTimeOffset
+
 
 #Utility functions
 def safeSum(values):
@@ -498,8 +500,8 @@ def timeShift(requestContext, seriesList, timeShift):
 
 
 def constantLine(requestContext, value):
-  start = timestamp( requestContext['startTime'] )
-  end = timestamp( requestContext['endTime'] )
+  start = time.mktime( requestContext['startTime'].timetuple() )
+  end = time.mktime( requestContext['endTime'].timetuple() )
   step = end - start
   series = TimeSeries(str(value), start, end, step, [value])
   return [series]

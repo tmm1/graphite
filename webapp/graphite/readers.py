@@ -1,6 +1,7 @@
 import time
-from ceres import CeresNode
 from graphite.node import LeafNode, BranchNode
+from graphite.carbonlink import CarbonLink
+from graphite.logger import log
 
 
 try:
@@ -20,16 +21,50 @@ except ImportError:
 
 
 
+class MultiReader:
+  def __init__(self, readers):
+    self.readers = readers
+
+  def fetch(self, startTime, endTime):
+    results = [ r.fetch(startTime, endTime) for r in self.readers ]
+    return reduce(results, self.merge)
+
+  def merge(self, results1, results2):
+    pass #XXX call node.fetch() on each node, and surgically combine the results.
+    #first dilemma is to figure out picking a step... I could default to the finest
+    #  but i'd have to keep coarser ones correct by repeating datapoints (which could get hairy...)
+
+
 class CeresReader:
   supported = True
 
-  def __init__(self, fs_path):
-    self.node = CeresNode.fromFilesystemPath(fs_path)
+  def __init__(self, ceres_node, real_metric_path):
+    self.ceres_node = ceres_node
+    self.real_metric_path = real_metric_path
 
-  def fetch(self, fromTime, untilTime):
-    data = self.node.read(fromTime, untilTime)
-    timeInfo = (data.startTime, data.endTime, data.timeStep)
-    return (timeInfo, data.values)
+  def fetch(self, startTime, endTime):
+    data = self.ceres_node.read(startTime, endTime)
+    time_info = (data.startTime, data.endTime, data.timeStep)
+    values = list(data.values)
+
+    # Merge in data from carbon's cache
+    if data.endTime < endTime:
+      try:
+        cached_datapoints = CarbonLink.query(self.real_metric_path)
+      except:
+        log.exception("Failed CarbonLink query '%s'" % self.real_metric_path)
+        cached_datapoints = []
+
+      for (timestamp, value) in cached_datapoints:
+        interval = timestamp - (timestamp % data.timeStep)
+
+        try:
+          i = int(interval - data.startTime) / data.timeStep
+          values[i] = value
+        except:
+          pass
+
+    return (time_info, values)
 
 
 class WhisperReader:

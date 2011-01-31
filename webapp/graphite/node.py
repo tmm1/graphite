@@ -1,26 +1,23 @@
-from graphite.intervals import IntervalSet
+from graphite.intervals import IntervalSet, Interval
 
 
 class Node:
-  name = property(lambda self: self.metric_path.split('.')[-1])
-  has_data = False
-  has_children = False
-  intervals = IntervalSet([])
+  name = property(lambda self: self.path.split('.')[-1])
 
 
 class BranchNode(Node):
-  has_children = True
+  is_leaf = False
 
-  def __init__(self, metric_path):
-    self.metric_path = metric_path
+  def __init__(self, path):
+    self.path = path
 
 
 class LeafNode(Node):
-  has_data = True
+  is_leaf = True
+  intervals = IntervalSet( [Interval(float('-inf'), float('inf')] )
 
-  def __init__(self, metric_path, real_metric_path, reader):
-    self.metric_path = metric_path
-    self.real_metric_path = real_metric_path
+  def __init__(self, path, reader):
+    self.path = path
     self.reader = reader
 
   def fetch(self, startTime, endTime):

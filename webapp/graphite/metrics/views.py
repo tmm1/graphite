@@ -68,10 +68,10 @@ def find_view(request):
     response = HttpResponse(content, mimetype='application/pickle')
 
   elif format == 'completer':
-    if len(matches) == 1 and (not matches[0].isLeaf()) and query == matches[0].metric_path + '*': # auto-complete children
+    if len(matches) == 1 and (not matches[0].is_leaf) and query == matches[0].path + '*': # auto-complete children
       matches = list( store.find(query + '.*') )
 
-    content = json.dumps({ 'metrics' : [ dict(path=node.metric_path, name=node.name) for node in matches ] })
+    content = json.dumps({ 'metrics' : [ dict(path=node.path, name=node.name) for node in matches ] })
     response = HttpResponse(content, mimetype='text/json')
 
   else:
@@ -100,7 +100,7 @@ def tree_json(nodes, base_path, wildcards=False):
   if len(nodes) > 1 and wildcards:
     wildcardNode = {'text' : '*', 'id' : base_path + '*'}
 
-    if any(not n.isLeaf() for n in nodes):
+    if any(not n.is_leaf for n in nodes):
       wildcardNode.update(branchNode)
 
     else:
@@ -120,7 +120,7 @@ def tree_json(nodes, base_path, wildcards=False):
       'id' : base_path + str(node.name),
     }
 
-    if node.isLeaf():
+    if node.is_leaf:
       resultNode.update(leafNode)
     else:
       resultNode.update(branchNode)
@@ -131,7 +131,7 @@ def tree_json(nodes, base_path, wildcards=False):
 
 
 def pickle_nodes(nodes):
-  return pickle.dumps([ { 'metric_path' : n.metric_path, 'isLeaf' : n.isLeaf() } for n in nodes ])
+  return pickle.dumps([ { 'metric_path' : n.path, 'isLeaf' : n.is_leaf } for n in nodes ])
 
 
 def any(iterable): #python2.4 compatibility

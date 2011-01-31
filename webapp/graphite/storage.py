@@ -6,11 +6,12 @@ import errno
 from os.path import islink, isdir, isfile, realpath, join, dirname, basename
 from django.conf import settings
 from ceres import CeresNode
-from graphite.node import BranchNode, LeafNode
-from graphite.intervals import Interval
-from graphite.remote_storage import RemoteStore
-from graphite.readers import CeresReader, WhisperReader, GzippedWhisperReader, RRDFileReader
 from graphite.logger import log
+from graphite.remote_storage import RemoteStore
+from graphite.node import BranchNode, LeafNode
+from graphite.intervals import Interval, IntervalSet
+from graphite.readers import (MultiReader, CeresReader, WhisperReader,
+                              GzippedWhisperReader, RRDFileReader)
 
 
 DATASOURCE_DELIMETER = '::RRD_DATASOURCE::'
@@ -19,7 +20,7 @@ DATASOURCE_DELIMETER = '::RRD_DATASOURCE::'
 class Store:
   def __init__(self, directories=[], hosts=[]):
     self.directories = directories
-    self.remote_hosts = [host for host in hosts if not is_local_interface(host) ]
+    self.remote_hosts = [host for host in hosts if not is_local_interface(host)]
     self.remote_stores = [ RemoteStore(host) for host in self.remote_hosts ]
 
     if not (directories or remote_hosts):
@@ -46,13 +47,25 @@ class Store:
     # Group matching nodes by their metric path
     nodes_by_metric = {}
     for node in matching_nodes:
-      if node.metric_path not in nodes_by_metric:
-        nodes_by_metric[node.metric_path] = set()
+      if node.path not in nodes_by_metric:
+        nodes_by_metric[node.path] = []
 
-      nodes_by_metric[node.metric_path].add(node)
+      nodes_by_metric[node.path].append(node)
 
     # Reduce matching nodes for each metric to a minimal set
-    for metric, nodes in nodes_by_metric.iteritems():
+    for metric_path, nodes in nodes_by_metric.iteritems():
+      leaf_nodes = []
+
+      # First we dispense with the BranchNodes
+      for node in nodes:
+        if node.is_leaf:
+          leaf_nodes.append(node)
+        else:
+          yield node
+
+      if not leaf_nodes:
+        return
+
       minimal_node_set = set()
       covered_intervals = IntervalSet([])
 
@@ -61,13 +74,14 @@ class Store:
         relevant_intervals -= covered_intervals
         return relevant_intervals.size
 
-      while nodes:
-        best_node = max(nodes, key=measure_of_added_coverage)
+      nodes_remaining = list(leaf_nodes)
+      while nodes_remaining:
+        best_node = max(nodes_remaining, key=measure_of_added_coverage)
 
         if measure_of_added_coverage(best_node) == 0:
           break
 
-        nodes.remove(best_node)
+        nodes_remaining.remove(best_node)
         minimal_node_set.add(node)
         covered_intervals = covered_intervals.union(node.intervals)
 
@@ -75,15 +89,16 @@ class Store:
       # We include the most likely node if the gap is within tolerance.
       if not minimal_node_set:
         def distance_to_requested_interval(node):
-          latest = sorted(nodes.intervals, key=lambda i: i.end)[-1]
+          latest = sorted(node.intervals, key=lambda i: i.end)[-1]
           distance = query.interval.start - latest.end
           return distance if distance >= 0 else float('inf')
 
-        best_candidate = min(nodes, key=distance_to_requested_interval)
+        best_candidate = min(leaf_nodes, key=distance_to_requested_interval)
         if distance_to_requested_interval(best_candidate) <= settings.FIND_TOLERANCE:
           minimal_node_set.add(best_candidate)
 
-      yield MetaNode(metric, minimal_nodes)
+      reader = MultiReader(minimal_node_set)
+      yield LeafNode(metric_path, reader)
 
 
 
@@ -174,9 +189,11 @@ def find_nodes(root_dir, query):
     # Now we construct and yield an appropriate Node object
     if isdir(absolute_path):
       if CeresNode.isNodeDir(absolute_path):
-        reader = CeresReader(absolute_path)
-        if reader.node.hasDataForInterval(query.startTime, query.endTime):
-          yield LeafNode(metric_path, real_metric_path, reader)
+        ceres_node = CeresNode(absolute_path)
+
+        if ceres_node.hasDataForInterval(query.startTime, query.endTime):
+          reader = CeresReader(ceres_node, real_metric_path)
+          yield LeafNode(metric_path, reader)
 
       else:
         yield BranchNode(metric_path)
