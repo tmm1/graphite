@@ -3,10 +3,10 @@ import time
 import httplib
 import traceback
 from urllib import urlencode
-from graphite.render.hashing import compactHash
-from graphite.logger import log
 from django.core.cache import cache
 from django.conf import settings
+from graphite.render.hashing import compactHash
+from graphite.logger import log
 
 try:
   import cPickle as pickle

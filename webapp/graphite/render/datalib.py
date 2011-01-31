@@ -206,7 +206,7 @@ def fetchData(requestContext, pathExpr):
     doCacheLookup = isinstance(dbFile, CeresDirectory)
 
     if doCacheLookup:
-      getCacheResults = CarbonLink.sendRequest(dbFile.real_metric)
+      getCacheResults = CarbonLink.sendRequest(dbFile.real_metric_path)
 
     dbResults = dbFile.fetch(startTime, endTime)
 

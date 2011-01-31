@@ -1,33 +1,19 @@
-import os, time, fnmatch, socket, errno
-from os.path import isdir, isfile, join, exists, splitext, basename, realpath
-from ceres import CeresNode
-from graphite.remote_storage import RemoteStore
-from graphite.logger import log
+import os
+import time
+import fnmatch
+import socket
+import errno
+from os.path import islink, isdir, isfile, realpath, join, dirname, basename
 from django.conf import settings
-
-try:
-  import whisper
-except ImportError:
-  whisper = False
-
-try:
-  import rrdtool
-except ImportError:
-  rrdtool = False
-
-try:
-  import gzip
-except ImportError:
-  gzip = False
-
-try:
-  import cPickle as pickle
-except ImportError:
-  import pickle
+from ceres import CeresNode
+from graphite.node import BranchNode, LeafNode
+from graphite.intervals import Interval
+from graphite.remote_storage import RemoteStore
+from graphite.readers import CeresReader, WhisperReader, GzippedWhisperReader, RRDFileReader
+from graphite.logger import log
 
 
 DATASOURCE_DELIMETER = '::RRD_DATASOURCE::'
-
 
 
 class Store:
@@ -40,72 +26,78 @@ class Store:
       raise ValueError("directories and remote_hosts cannot both be empty")
 
 
-  def get(self, metric_path): #Deprecated
-    for directory in self.directories:
-      relative_fs_path = metric_path.replace('.', '/') + '.wsp'
-      absolute_fs_path = join(directory, relative_fs_path)
-
-      if exists(absolute_fs_path):
-        return WhisperFile(absolute_fs_path, metric_path)
-
-
   def find(self, pattern, startTime=None, endTime=None):
     query = Query(pattern, startTime, endTime)
-    log.info("Store.find(%s) remote_hosts=%s" % (query, self.remote_hosts))
 
-    if query.isExact:
-      match = self.find_first(query)
-
-      if match is not None:
-        yield match
-
-    else:
-      for match in self.find_all(query):
-        yield match
-
-
-  def find_first(self, query):
-    # Search locally first
-    for directory in self.directories:
-      for match in find(directory, query):
-        return match
-
-    # If nothing found earch remotely
-    remote_requests = [ r.find(query) for r in self.remote_stores if r.available ]
-
-    for request in remote_requests:
-      for match in request.get_results():
-        return match
-
-
-  def find_all(self, query):
     # Start remote searches
-    found = set()
     remote_requests = [ r.find(query) for r in self.remote_stores if r.available ]
+    matching_nodes = set()
 
     # Search locally
     for directory in self.directories:
-      for match in find(directory, query):
-        yield match
-        found.add(match.metric_path) # we're intentionally allowing dupes to be found locally, just not remotely (to combine wsp/ceres data)
+      for node in find_nodes(directory, query):
+        matching_nodes.add(node)
 
     # Gather remote search results
     for request in remote_requests:
-      for match in request.get_results():
+      for node in request.get_results():
+        matching_nodes.add(node)
 
-        if match.metric_path not in found:
-          yield match
-          found.add(match.metric_path)
+    # Group matching nodes by their metric path
+    nodes_by_metric = {}
+    for node in matching_nodes:
+      if node.metric_path not in nodes_by_metric:
+        nodes_by_metric[node.metric_path] = set()
+
+      nodes_by_metric[node.metric_path].add(node)
+
+    # Reduce matching nodes for each metric to a minimal set
+    for metric, nodes in nodes_by_metric.iteritems():
+      minimal_node_set = set()
+      covered_intervals = IntervalSet([])
+
+      def measure_of_added_coverage(node):
+        relevant_intervals = node.intervals.intersect_interval(query.interval)
+        relevant_intervals -= covered_intervals
+        return relevant_intervals.size
+
+      while nodes:
+        best_node = max(nodes, key=measure_of_added_coverage)
+
+        if measure_of_added_coverage(best_node) == 0:
+          break
+
+        nodes.remove(best_node)
+        minimal_node_set.add(node)
+        covered_intervals = covered_intervals.union(node.intervals)
+
+      # Sometimes the requested interval falls within the caching window.
+      # We include the most likely node if the gap is within tolerance.
+      if not minimal_node_set:
+        def distance_to_requested_interval(node):
+          latest = sorted(nodes.intervals, key=lambda i: i.end)[-1]
+          distance = query.interval.start - latest.end
+          return distance if distance >= 0 else float('inf')
+
+        best_candidate = min(nodes, key=distance_to_requested_interval)
+        if distance_to_requested_interval(best_candidate) <= settings.FIND_TOLERANCE:
+          minimal_node_set.add(best_candidate)
+
+      yield MetaNode(metric, minimal_nodes)
 
 
 
 class Query:
-  isExact = property(lambda self: '*' not in self.pattern and '?' not in self.pattern and '[' not in self.pattern)
+  isExact = property(lambda self: '*' not in self.pattern and
+                                  '?' not in self.pattern and
+                                  '[' not in self.pattern)
 
   def __init__(self, pattern, startTime, endTime):
     self.pattern = pattern
     self.startTime = startTime
     self.endTime = endTime
+    self.interval = Interval(float('-inf') if startTime is None else startTime,
+                             float('inf') if endTime is None else endTime)
 
 
   def __repr__(self):
@@ -146,54 +138,71 @@ def is_local_interface(host):
 
 
 
-def find(root_dir, query):
+def fs_to_metric(path):
+  dirpath = dirname(path)
+  filename = basename(path)
+  return join(dirpath, filename.split('.')[0]).replace('/','.')
+
+
+
+def find_nodes(root_dir, query):
   "Generates nodes beneath root_dir matching the given pattern"
   pattern_parts = query.pattern.split('.')
 
-  for absolute_path in _find(root_dir, pattern_parts):
+  for absolute_path in _find_paths(root_dir, pattern_parts):
     if basename(absolute_path).startswith('.'):
       continue
 
     if DATASOURCE_DELIMETER in basename(absolute_path):
-      (absolute_path,datasource_pattern) = absolute_path.rsplit(DATASOURCE_DELIMETER,1)
+      (absolute_path, datasource_pattern) = absolute_path.rsplit(DATASOURCE_DELIMETER, 1)
     else:
       datasource_pattern = None
 
     relative_path = absolute_path[ len(root_dir): ].lstrip('/')
-    metric_path = relative_path.replace('/','.')
+    metric_path = fs_to_metric(relative_path)
 
+    # Support symbolic links (real_metric_path ensures proper cache queries)
+    if islink(absolute_path):
+      real_fs_path = realpath(absolute_path)
+      relative_fs_path = metric_path.replace('.', '/')
+      base_fs_path = absolute_path[ :-len(relative_fs_path) ]
+      relative_real_fs_path = real_fs_path[ len(base_fs_path): ]
+      real_metric_path = fs_to_metric( relative_real_fs_path )
+    else:
+      real_metric_path = metric_path
+
+    # Now we construct and yield an appropriate Node object
     if isdir(absolute_path):
       if CeresNode.isNodeDir(absolute_path):
-        ceresDir = CeresDirectory(absolute_path)
-        if ceresDir.node.hasDataForInterval(query.startTime, query.endTime):
-          yield ceresDir
+        reader = CeresReader(absolute_path)
+        if reader.node.hasDataForInterval(query.startTime, query.endTime):
+          yield LeafNode(metric_path, real_metric_path, reader)
 
       else:
-        yield Branch(absolute_path, metric_path)
+        yield BranchNode(metric_path)
 
     elif isfile(absolute_path):
-      (metric_path,extension) = splitext(metric_path)
+      if absolute_path.endswith('.wsp') and WhisperReader.supported:
+        reader = WhisperReader(absolute_path)
+        yield LeafNode(metric_path, real_metric_path, reader)
 
-      if extension == '.wsp':
-        yield WhisperFile(absolute_path, metric_path)
+      elif absolute_path.endswith('.wsp.gz') and GzippedWhisperReader.supported:
+        reader = GzippedWhisperReader(absolute_path)
+        yield LeafNode(metric_path, real_metric_path, reader)
 
-      elif extension == '.gz' and metric_path.endswith('.wsp'):
-        metric_path = splitext(metric_path)[0]
-        yield GzippedWhisperFile(absolute_path, metric_path)
-
-      elif rrdtool and extension == '.rrd':
-        rrd = RRDFile(absolute_path, metric_path)
+      elif absolute_path.endswith('.rrd') and RRDFileReader.supported:
+        reader = RRDFileReader(absolute_path)
 
         if datasource_pattern is None:
-          yield rrd
+          yield BranchNode(metric_path)
 
         else:
-          for source in rrd.getDataSources():
+          for source in reader.getDataSources():
             if fnmatch.fnmatch(source.name, datasource_pattern):
               yield source
 
 
-def _find(current_dir, patterns):
+def _find_paths(current_dir, patterns):
   """Recursively generates absolute paths whose components underneath current_dir
   match the corresponding pattern in patterns"""
   pattern = patterns[0]
@@ -220,7 +229,7 @@ def _find(current_dir, patterns):
     for subdir in matching_subdirs:
 
       absolute_path = join(current_dir, subdir)
-      for match in _find(absolute_path, patterns):
+      for match in _find_paths(absolute_path, patterns):
         yield match
 
   else: #we've got the last pattern
@@ -230,125 +239,6 @@ def _find(current_dir, patterns):
 
     for basename in matching_subdirs + matching_files:
       yield join(current_dir, basename)
-
-
-# Node classes
-class Node:
-  def __init__(self, fs_path, metric_path):
-    self.fs_path = str(fs_path)
-    self.metric_path = str(metric_path)
-    self.real_metric = str(metric_path)
-    self.name = self.metric_path.split('.')[-1]
-
-
-
-class Branch(Node):
-  "Node with children"
-  def fetch(self, startTime, endTime):
-    "No-op to make all Node's fetch-able"
-    return []
-
-  def isLeaf(self):
-    return False
-
-
-
-class Leaf(Node):
-  "(Abstract) Node that stores data"
-  def isLeaf(self):
-    return True
-
-
-
-# Database File classes
-class WhisperFile(Leaf):
-  extension = '.wsp'
-
-  def __init__(self, *args, **kwargs):
-    Leaf.__init__(self, *args, **kwargs)
-    real_fs_path = realpath(self.fs_path)
-
-    if real_fs_path != self.fs_path:
-      relative_fs_path = self.metric_path.replace('.', '/') + self.extension
-      base_fs_path = self.fs_path[ :-len(relative_fs_path) ]
-      relative_real_fs_path = real_fs_path[ len(base_fs_path): ]
-      self.real_metric = relative_real_fs_path[ :-len(self.extension) ].replace('/', '.')
-
-  def fetch(self, startTime, endTime):
-    return whisper.fetch(self.fs_path, startTime, endTime)
-
-
-
-class GzippedWhisperFile(WhisperFile):
-  extension = '.wsp.gz'
-
-  def fetch(self, startTime, endTime):
-    if not gzip:
-      raise Exception("gzip module not available, GzippedWhisperFile not supported")
-
-    fh = gzip.GzipFile(self.fs_path, 'rb')
-    try:
-      return whisper.file_fetch(fh, startTime, endTime)
-    finally:
-      fh.close()
-
-
-
-class RRDFile(Branch):
-  def getDataSources(self):
-    try:
-      info = rrdtool.info(self.fs_path)
-      return [RRDDataSource(self, source) for source in info['ds']]
-    except:
-      raise
-      return []
-
-
-
-class RRDDataSource(Leaf):
-  def __init__(self, rrd_file, name):
-    self.rrd_file = rrd_file
-    self.name = name
-    self.fs_path = rrd_file.fs_path
-    self.metric_path = rrd_file.metric_path + '.' + name
-    self.real_metric = metric_path
-
-
-  def fetch(self, startTime, endTime):
-    startString = time.strftime("%H:%M_%Y%m%d", time.localtime(startTime))
-    endString = time.strftime("%H:%M_%Y%m%d", time.localtime(endTime))
-
-    (timeInfo, columns, rows) = rrdtool.fetch(self.fs_path,'AVERAGE','-s' + startString,'-e' + endString)
-    colIndex = list(columns).index(self.name)
-    rows.pop() #chop off the latest value because RRD returns crazy last values sometimes
-    values = (row[colIndex] for row in rows)
-
-    return (timeInfo, values)
-
-
-
-class CeresDirectory(Leaf):
-  "Compatibility class between Store and CeresNode interfaces"
-
-  def __init__(self, fsPath):
-    self.node = CeresNode.fromFilesystemPath(fsPath)
-    self.fs_path = fsPath
-    self.metric_path = self.node.nodePath
-    self.real_metric = self.node.nodePath
-    self.name = self.metric_path.split('.')[-1]
-
-    real_fs_path = realpath(self.fs_path)
-    if real_fs_path != self.fs_path:
-      relative_fs_path = self.metric_path.replace('.', '/')
-      base_fs_path = self.fs_path[ :-len(relative_fs_path) ]
-      relative_real_fs_path = real_fs_path[ len(base_fs_path): ]
-      self.real_metric = relative_real_fs_path.replace('/', '.')
-
-
-  def fetch(self, fromTime, untilTime):
-    data = self.node.read(fromTime, untilTime)
-    timeInfo = (data.startTime, data.endTime, data.timeStep)
-    return (timeInfo, data.values)
 
 
 
