@@ -22,11 +22,11 @@ except ImportError:
 
 
 class MultiReader:
-  def __init__(self, readers):
-    self.readers = readers
+  def __init__(self, nodes):
+    self.nodes = nodes
 
   def fetch(self, startTime, endTime):
-    results = [ r.fetch(startTime, endTime) for r in self.readers ]
+    results = [ n.fetch(startTime, endTime) for n in self.nodes ]
     return reduce(results, self.merge)
 
   def merge(self, results1, results2):
