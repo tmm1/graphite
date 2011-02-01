@@ -1,11 +1,9 @@
 import socket
 import time
 import httplib
-import traceback
 from urllib import urlencode
-from django.core.cache import cache
 from django.conf import settings
-from graphite.render.hashing import compactHash
+from graphite.node import LeafNode, BranchNode
 from graphite.logger import log
 
 try:
@@ -14,49 +12,32 @@ except ImportError:
   import pickle
 
 
-
 class RemoteStore(object):
-  timeout = 5
   lastFailure = 0.0
-  retryDelay = 10
-  available = property(lambda self: time.time() - self.lastFailure > self.retryDelay)
+  available = property(lambda self: time.time() - self.lastFailure > settings.REMOTE_RETRY_DELAY)
 
   def __init__(self, host):
     self.host = host
-
 
   def find(self, query):
     request = FindRequest(self, query)
     request.send()
     return request
 
-
   def fail(self):
     self.lastFailure = time.time()
 
 
-
 class FindRequest:
-  suppressErrors = True
-
   def __init__(self, store, query):
     self.store = store
     self.query = query
     self.connection = None
-    self.cacheKey = compactHash('find:%s:%s' % (self.store.host, query))
-    self.cachedResults = None
-
 
   def send(self):
     log.info("FindRequest.send(host=%s, query=%s) called" % (self.store.host, self.query))
-    self.cachedResults = cache.get(self.cacheKey)
-
-    if self.cachedResults:
-      log.info("FindRequest.send(host=%s, query=%s) returning cached results" % (self.store.host, self.query))
-      return
-
     self.connection = HTTPConnectionWithTimeout(self.store.host)
-    self.connection.timeout = self.store.timeout
+    self.connection.timeout = settings.REMOTE_FIND_TIMEOUT
 
     query_params = [
       ('local', '1'),
@@ -74,17 +55,13 @@ class FindRequest:
     try:
       self.connection.request('GET', '/metrics/find/?' + query_string)
     except:
-      log.info("FindRequest.send(host=%s, query=%s) exception during request\n%s" % (self.store.host, self.query, traceback.format_exc()))
+      log.exception("FindRequest.send(host=%s, query=%s) exception during request\n%s" % (self.store.host, self.query))
       self.store.fail()
       if not self.suppressErrors:
         raise
 
-
   def get_results(self):
-    if self.cachedResults:
-      return self.cachedResults
-
-    if not self.connection:
+    if self.connection is None:
       self.send()
 
     try:
@@ -94,36 +71,28 @@ class FindRequest:
       results = pickle.loads(result_data)
 
     except:
-      log.info("FindRequest.get_results(host=%s, query=%s) exception processing response" % (self.store.host, self.query))
+      log.exception("FindRequest.get_results(host=%s, query=%s) exception processing response" % (self.store.host, self.query))
       self.store.fail()
-      if not self.suppressErrors:
-        raise
+      return
+
+    for node_info in results:
+      if node_info['is_leaf']:
+        reader = RemoteReader(self.store, node_info)
+        yield LeafNode(node_info['path'], reader)
       else:
-        results = []
-
-    resultNodes = [ RemoteNode(self.store, node['metric_path'], node['isLeaf']) for node in results ]
-    cache.set(self.cacheKey, resultNodes, settings.REMOTE_FIND_CACHE_DURATION)
-    self.cachedResults = resultNodes
-    return resultNodes
+        yield BranchNode(node_info['path'])
 
 
-
-class RemoteNode:
-  context = {}
-
-  def __init__(self, store, metric_path, isLeaf):
+class RemoteReader:
+  def __init__(self, store, node_info):
     self.store = store
-    self.fs_path = None
-    self.metric_path = metric_path
-    self.real_metric = metric_path
-    self.name = metric_path.split('.')[-1]
-    self.__isLeaf = isLeaf
+    self.metric_path = node_info['path']
+    self.intervals = node_info['intervals']
 
+  def get_intervals(self):
+    return self.intervals
 
   def fetch(self, startTime, endTime):
-    if not self.isLeaf:
-      raise Exception("Cannot fetch a non-leaf node")
-
     query_params = [
       ('target', self.metric_path),
       ('pickle', 'true'),
@@ -132,30 +101,22 @@ class RemoteNode:
     ]
     query_string = urlencode(query_params)
 
-    log.info("RemoteNode(%s).fetch(http://%s/render/?%s) sending request" % (self. metric_path, self.store.host, query_string))
+    url = "http://%s/render/?%s" % (self.store.host, query_string)
+    log.info("RemoteReader.fetch %s" % url)
+
     connection = HTTPConnectionWithTimeout(self.store.host)
-    connection.timeout = self.store.timeout
+    connection.timeout = settings.REMOTE_FETCH_TIMEOUT
     connection.request('GET', '/render/?' + query_string)
     response = connection.getresponse()
 
     if response.status != 200:
-      log.info("RemoteNode(%s).fetch(http://%s/render/?%s) got error response %d %s" % (self. metric_path, self.store.host, query_string, response.status, response.reason))
-      raise Exception("Failed to retrieve remote data: %d %s" % (response.status, response.reason))
+      raise Exception("Error response %d %s from %s" % (response.status, response.reason, url))
 
-    rawData = response.read()
-    log.info("RemoteNode(%s).fetch(http://%s/render/?%s) got %d byte response" % (self. metric_path, self.store.host, query_string, len(rawData)))
-
-    seriesList = pickle.loads(rawData)
-    assert len(seriesList) == 1, "Invalid result: seriesList=%s" % str(seriesList)
-    series = seriesList[0]
-
-    timeInfo = (series['start'], series['end'], series['step'])
-    return (timeInfo, series['values'])
-
-
-  def isLeaf(self):
-    return self.__isLeaf
-
+    pickled_response = response.read()
+    series_list = pickle.loads(pickled_response)
+    series = series_list[0]
+    time_info = (series['start'], series['end'], series['step'])
+    return (time_info, series['values'])
 
 
 # This is a hack to put a timeout in the connect() of an HTTP request.

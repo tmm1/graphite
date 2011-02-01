@@ -32,7 +32,6 @@ INDEX_FILE = STORAGE_DIR + 'index'
 WHITELIST_FILE = LISTS_DIR + 'whitelist'
 LOG_DIR = STORAGE_DIR + 'log/webapp/'
 THIRDPARTY_DIR = WEB_DIR + 'thirdparty/'
-CLUSTER_SERVERS = []
 
 sys.path.insert(0, THIRDPARTY_DIR)
 sys.path.insert(0, WEBAPP_DIR)
@@ -57,10 +56,17 @@ except ImportError:
   pass
 
 
+# Cluster settings
+CLUSTER_SERVERS = []
+REMOTE_FIND_TIMEOUT = 3.0
+REMOTE_FETCH_TIMEOUT = 6.0
+REMOTE_RETRY_DELAY = 60.0
+
 #Memcache settings
 MEMCACHE_HOSTS = []
 MEMCACHE_DURATION = 60 #metric data and graphs are cached for one minute by default
-REMOTE_FIND_CACHE_DURATION = 300
+FIND_CACHE_DURATION = 300
+FIND_TOLERANCE = 2 * FIND_CACHE_DURATION
 LOG_CACHE_PERFORMANCE = False
 
 #Remote rendering settings

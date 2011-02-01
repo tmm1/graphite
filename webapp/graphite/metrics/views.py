@@ -131,7 +131,16 @@ def tree_json(nodes, base_path, wildcards=False):
 
 
 def pickle_nodes(nodes):
-  return pickle.dumps([ { 'metric_path' : n.path, 'isLeaf' : n.is_leaf } for n in nodes ])
+  nodes_info = []
+
+  for node in nodes:
+    info = dict(path=node.path, is_leaf=node.is_leaf)
+    if node.is_leaf:
+      info['intervals'] = node.intervals
+
+    nodes_info.append(info)
+
+  return pickle.dumps(nodes_info, protocol=-1)
 
 
 def any(iterable): #python2.4 compatibility

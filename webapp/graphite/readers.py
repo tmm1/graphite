@@ -1,5 +1,7 @@
+import os
 import time
 from graphite.node import LeafNode, BranchNode
+from graphite.intervals import Interval, IntervalSet
 from graphite.carbonlink import CarbonLink
 from graphite.logger import log
 
@@ -25,14 +27,55 @@ class MultiReader:
   def __init__(self, nodes):
     self.nodes = nodes
 
-  def fetch(self, startTime, endTime):
-    results = [ n.fetch(startTime, endTime) for n in self.nodes ]
-    return reduce(results, self.merge)
+  def get_intervals(self):
+    interval_sets = [ n.intervals for n in self.nodes ]
+    return reduce(IntervalSet.union, interval_sets)
 
-  def merge(self, results1, results2):
-    pass #XXX call node.fetch() on each node, and surgically combine the results.
-    #first dilemma is to figure out picking a step... I could default to the finest
-    #  but i'd have to keep coarser ones correct by repeating datapoints (which could get hairy...)
+  def fetch(self, startTime, endTime): #TODO allow for parallelism in RemoteReader.fetch() calls (threads?)
+    results = [ n.fetch(startTime, endTime) for n in self.nodes ]
+    return reduce(self.merge, results)
+
+  def merge(self, results1, results2): #XXX
+    if results1[0][2] == results2[0][2]:
+      return self.same_step_merge(results1, results2) # common case, cheaper
+
+    # Ensure results1 is finer than results2
+    if results1[0][2] > results2[0][2]:
+      results1, results2 = results2, results1
+
+    time_info1, values1 = results1
+    time_info2, values2 = results2
+    start1, end1, step1 = time_info1
+    start2, end2, step2 = time_info2
+
+    step   = step1                # finest step
+    start  = min(start1, start2)  # earliest start
+    end    = max(end1, end2)      # latest end
+    values = []
+
+    # Walk our time cursor t through both time ranges
+    t = start
+    while t < end:
+      # 
+      if t >= start1:
+        i = 
+
+      t += step
+
+  def same_step_merge(results1, results2):
+    # Ensure results1 starts no later than results2
+    if results1[0][0] > results2[0][0]:
+      results1, results2 = results2, results1
+
+    time_info1, values1 = results1
+    time_info2, values2 = results2
+    start1, end1, step = time_info1
+    start2, end2, step = time_info2
+    offset = (start2 - start1) / step
+    values = values1
+
+    #XXX
+
 
 
 class CeresReader:
@@ -41,6 +84,14 @@ class CeresReader:
   def __init__(self, ceres_node, real_metric_path):
     self.ceres_node = ceres_node
     self.real_metric_path = real_metric_path
+
+  def get_intervals(self):
+    intervals = []
+    for info in self.ceres_node.slice_info:
+      (start, end, step) = info
+      intervals.append( Interval(start, end) )
+
+    return IntervalSet(intervals)
 
   def fetch(self, startTime, endTime):
     data = self.ceres_node.read(startTime, endTime)
@@ -73,12 +124,28 @@ class WhisperReader:
   def __init__(self, fs_path):
     self.fs_path = fs_path
 
+  def get_intervals(self):
+    start = time.time() - whisper.info(self.fs_path)['maxRetention']
+    end = os.stat(self.fs_path).st_mtime
+    return IntervalSet( [Interval(start, end)] )
+
   def fetch(self, startTime, endTime):
     return whisper.fetch(self.fs_path, startTime, endTime)
 
 
 class GzippedWhisperReader(WhisperReader):
   supported = bool(whisper and gzip)
+
+  def get_intervals(self):
+    fh = gzip.GzipFile(self.fs_path, 'rb')
+    try:
+      info = whisper.__readHeader(fh) # evil, but necessary.
+    finally:
+      fh.close()
+
+    start = time.time() - info['maxRetention']
+    end = os.stat(self.fs_path).st_mtime
+    return IntervalSet( [Interval(start,end)] )
 
   def fetch(self, startTime, endTime):
     fh = gzip.GzipFile(self.fs_path, 'rb')
@@ -88,35 +155,53 @@ class GzippedWhisperReader(WhisperReader):
       fh.close()
 
 
-class RRDFileReader:
+class RRDReader:
   supported = bool(rrdtool)
 
-  def __init__(self, fs_path):
+  def __init__(self, fs_path, datasource_name):
     self.fs_path = fs_path
+    self.datasource_name = datasource_name
 
-  def getDataSources(self):
-    try:
-      info = rrdtool.info(self.fs_path)
-      return [RRDDataSourceReader(self, source) for source in info['ds']]
-    except:
-      raise
-      return []
-
-
-class RRDDataSourceReader:
-  supported = RRDFileReader.supported
-
-  def __init__(self, rrd_file, name):
-    self.rrd_file = rrd_file
-    self.name = name
+  def get_intervals(self):
+    start = time.time() - self.get_retention(self.fs_path)
+    end = os.stat(self.fs_path).st_mtime
+    return IntervalSet( [Interval(start, end)] )
 
   def fetch(self, startTime, endTime):
     startString = time.strftime("%H:%M_%Y%m%d", time.localtime(startTime))
     endString = time.strftime("%H:%M_%Y%m%d", time.localtime(endTime))
 
-    (timeInfo, columns, rows) = rrdtool.fetch(self.rrd_file.fs_path,'AVERAGE','-s' + startString,'-e' + endString)
-    colIndex = list(columns).index(self.name)
+    (timeInfo, columns, rows) = rrdtool.fetch(self.fs_path,'AVERAGE','-s' + startString,'-e' + endString)
+    colIndex = list(columns).index(self.datasource_name)
     rows.pop() #chop off the latest value because RRD returns crazy last values sometimes
     values = (row[colIndex] for row in rows)
 
     return (timeInfo, values)
+
+  @staticmethod
+  def get_datasources(fs_path):
+    info = rrdtool.info(fs_path)
+
+    if 'ds' in info:
+      return [datasource_name for datasource_name in info['ds']]
+    else:
+      ds_keys = [ key for key in info if key.startswith('ds[') ]
+      datasources = set( key[3:].split(']')[0] for key in ds_keys )
+      return list(datasources)
+
+  @staticmethod
+  def get_retention(fs_path): #FIXME probly won't work with the old rrdtool API
+    info = rrdtool.info(fs_path)
+    rows = {}
+    pdp_per_row = {}
+
+    for key in info:
+      if key.startswith('rra[') and key.endswith('].rows'):
+        id = key[4:-6]
+        rows[id] = info[key]
+
+      elif key.startswith('rra[') and key.endswith('].pdp_per_row'):
+        id = key[4:-13]
+        pdp_per_row[id] = info[key]
+
+    return info['step'] * max( rows[id] * pdp_per_row[id] for id in rows )

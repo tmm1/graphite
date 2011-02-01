@@ -11,24 +11,21 @@ from graphite.remote_storage import RemoteStore
 from graphite.node import BranchNode, LeafNode
 from graphite.intervals import Interval, IntervalSet
 from graphite.readers import (MultiReader, CeresReader, WhisperReader,
-                              GzippedWhisperReader, RRDFileReader)
-
-
-DATASOURCE_DELIMETER = '::RRD_DATASOURCE::'
+                              GzippedWhisperReader, RRDReader)
 
 
 class Store:
   def __init__(self, directories=[], hosts=[]):
     self.directories = directories
-    self.remote_hosts = [host for host in hosts if not is_local_interface(host)]
-    self.remote_stores = [ RemoteStore(host) for host in self.remote_hosts ]
+    remote_hosts = [host for host in hosts if not is_local_interface(host)]
+    self.remote_stores = [ RemoteStore(host) for host in remote_hosts ]
 
     if not (directories or remote_hosts):
       raise ValueError("directories and remote_hosts cannot both be empty")
 
 
   def find(self, pattern, startTime=None, endTime=None):
-    query = Query(pattern, startTime, endTime)
+    query = FindQuery(pattern, startTime, endTime)
 
     # Start remote searches
     remote_requests = [ r.find(query) for r in self.remote_stores if r.available ]
@@ -60,7 +57,7 @@ class Store:
       for node in nodes:
         if node.is_leaf:
           leaf_nodes.append(node)
-        else:
+        else: #TODO need to filter branch nodes based on requested interval... how?!?!?
           yield node
 
       if not leaf_nodes:
@@ -102,7 +99,7 @@ class Store:
 
 
 
-class Query:
+class FindQuery:
   isExact = property(lambda self: '*' not in self.pattern and
                                   '?' not in self.pattern and
                                   '[' not in self.pattern)
@@ -126,7 +123,7 @@ class Query:
     else:
       endString = time.ctime(self.endTime)
 
-    return '<Query: %s from %s until %s>' % (self.pattern, startString, endString)
+    return '<FindQuery: %s from %s until %s>' % (self.pattern, startString, endString)
 
 
 
@@ -160,6 +157,8 @@ def fs_to_metric(path):
 
 
 
+DATASOURCE_DELIMETER = '::RRD_DATASOURCE::'
+
 def find_nodes(root_dir, query):
   "Generates nodes beneath root_dir matching the given pattern"
   pattern_parts = query.pattern.split('.')
@@ -189,7 +188,7 @@ def find_nodes(root_dir, query):
     # Now we construct and yield an appropriate Node object
     if isdir(absolute_path):
       if CeresNode.isNodeDir(absolute_path):
-        ceres_node = CeresNode(absolute_path)
+        ceres_node = CeresNode.fromFilesystemPath(absolute_path)
 
         if ceres_node.hasDataForInterval(query.startTime, query.endTime):
           reader = CeresReader(ceres_node, real_metric_path)
@@ -201,22 +200,21 @@ def find_nodes(root_dir, query):
     elif isfile(absolute_path):
       if absolute_path.endswith('.wsp') and WhisperReader.supported:
         reader = WhisperReader(absolute_path)
-        yield LeafNode(metric_path, real_metric_path, reader)
+        yield LeafNode(metric_path, reader)
 
       elif absolute_path.endswith('.wsp.gz') and GzippedWhisperReader.supported:
         reader = GzippedWhisperReader(absolute_path)
-        yield LeafNode(metric_path, real_metric_path, reader)
+        yield LeafNode(metric_path, reader)
 
-      elif absolute_path.endswith('.rrd') and RRDFileReader.supported:
-        reader = RRDFileReader(absolute_path)
-
+      elif absolute_path.endswith('.rrd') and RRDReader.supported:
         if datasource_pattern is None:
           yield BranchNode(metric_path)
 
         else:
-          for source in reader.getDataSources():
-            if fnmatch.fnmatch(source.name, datasource_pattern):
-              yield source
+          for datasource_name in RRDReader.get_datasources(absolute_path):
+            if fnmatch.fnmatch(datasource_name, datasource_pattern):
+              reader = RRDReader(absolute_path, datasource_name)
+              yield LeafNode(metric_path, reader)
 
 
 def _find_paths(current_dir, patterns):
@@ -230,7 +228,7 @@ def _find_paths(current_dir, patterns):
   matching_subdirs = fnmatch.filter(subdirs, pattern)
   matching_subdirs.sort()
 
-  if len(patterns) == 1 and rrdtool: #the last pattern may apply to RRD data sources
+  if len(patterns) == 1 and RRDReader.supported: #the last pattern may apply to RRD data sources
     files = [e for e in entries if isfile( join(current_dir,e) )]
     rrd_files = fnmatch.filter(files, pattern + ".rrd")
     rrd_files.sort()

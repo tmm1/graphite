@@ -14,11 +14,11 @@ class BranchNode(Node):
 
 class LeafNode(Node):
   is_leaf = True
-  intervals = IntervalSet( [Interval(float('-inf'), float('inf')] )
 
   def __init__(self, path, reader):
     self.path = path
     self.reader = reader
+    self.intervals = reader.get_intervals()
 
   def fetch(self, startTime, endTime):
     return self.reader.fetch(startTime, endTime)
