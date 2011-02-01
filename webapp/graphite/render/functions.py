@@ -369,6 +369,12 @@ def maximumBelow(requestContext, seriesList, n):
 def highestCurrent(requestContext, seriesList, n):
   return sorted( seriesList, key=safeLast )[-n:]
 
+def highestMax(requestContext, seriesList, n):
+  """Returns upto n seriesList members where the respective series has a max member is in the top-n."""
+  result_list = sorted( seriesList, key=lambda s: max(s) )[-n:]
+
+  return sorted(result_list, key=lambda s: max(s), reverse=True)
+
 def lowestCurrent(requestContext, seriesList, n):
   return sorted( seriesList, key=safeLast )[:n]
 
@@ -389,6 +395,28 @@ def averageAbove(requestContext, seriesList, n):
 
 def averageBelow(requestContext, seriesList, n):
   return [ series for series in seriesList if safeDiv(safeSum(series),safeLen(series)) <= n ]
+
+def percentileOrdinal(n, series):
+  result = int( safeDiv(n * len(series), 100) + 0.5 )
+  return result
+
+def nPercentile(requestContext, seriesList, n):
+  """Returns n-percent of each series in the seriesList."""
+  assert n, 'The requested percent is required to be greater than 0'
+
+  results = []
+  for s in seriesList:
+    # Create a sorted copy of the TimeSeries excluding None values in the values list.
+    s_copy = TimeSeries( s.name, s.start, s.end, s.step, sorted( [item for item in s if item is not None] ) )
+    if not s_copy:
+      continue  # Skip this series because it is empty.
+
+    pord = percentileOrdinal( n, s_copy )
+    perc_val = s_copy[ pord - 1 if pord > 0 else pord ]
+    if perc_val:
+      results.append( TimeSeries( '%dth Percentile(%s, %.1f)' % ( n, s_copy.name, perc_val ),
+                                  s_copy.start, s_copy.end, s_copy.step, [perc_val] ) )
+  return results
 
 def limit(requestContext, seriesList, n):
   return seriesList[0:n]
@@ -616,6 +644,7 @@ SeriesFunctions = {
   'mostDeviant' : mostDeviant,
   'highestCurrent' : highestCurrent,
   'lowestCurrent' : lowestCurrent,
+  'highestMax' : highestMax,
   'currentAbove' : currentAbove,
   'currentBelow' : currentBelow,
   'highestAverage' : highestAverage,
@@ -624,6 +653,7 @@ SeriesFunctions = {
   'averageBelow' : averageBelow,
   'maximumAbove' : maximumAbove,
   'maximumBelow' : maximumBelow,
+  'nPercentile' : nPercentile,
   'limit' : limit,
   'sortByMaxima' : sortByMaxima,
   'sortByMinima' : sortByMinima,
