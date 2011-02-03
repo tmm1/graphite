@@ -4,6 +4,9 @@ from graphite.intervals import IntervalSet, Interval
 class Node:
   name = property(lambda self: self.path.split('.')[-1])
 
+  def __repr__(self):
+    return '<%s: %s>' % (self.__class__.__name__, self.path)
+
 
 class BranchNode(Node):
   is_leaf = False

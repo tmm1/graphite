@@ -34,23 +34,27 @@ class Store:
     # Search locally
     for directory in self.directories:
       for node in find_nodes(directory, query):
+        log.info("find() :: local :: %s" % node.path)
         matching_nodes.add(node)
 
     # Gather remote search results
     for request in remote_requests:
       for node in request.get_results():
+        log.info("find() :: remote :: %s" % node.path)
         matching_nodes.add(node)
 
-    # Group matching nodes by their metric path
-    nodes_by_metric = {}
+    # Group matching nodes by their path
+    nodes_by_path = {}
     for node in matching_nodes:
-      if node.path not in nodes_by_metric:
-        nodes_by_metric[node.path] = []
+      log.info("matching node: %s" % node)
+      if node.path not in nodes_by_path:
+        nodes_by_path[node.path] = []
 
-      nodes_by_metric[node.path].append(node)
+      nodes_by_path[node.path].append(node)
 
-    # Reduce matching nodes for each metric to a minimal set
-    for metric_path, nodes in nodes_by_metric.iteritems():
+    # Reduce matching nodes for each path to a minimal set
+    for path, nodes in nodes_by_path.iteritems():
+      log.info("path=%s  nodes=%s" % (path, str(nodes)))
       leaf_nodes = []
 
       # First we dispense with the BranchNodes
@@ -61,7 +65,7 @@ class Store:
           yield node
 
       if not leaf_nodes:
-        return
+        continue
 
       minimal_node_set = set()
       covered_intervals = IntervalSet([])
@@ -95,7 +99,7 @@ class Store:
           minimal_node_set.add(best_candidate)
 
       reader = MultiReader(minimal_node_set)
-      yield LeafNode(metric_path, reader)
+      yield LeafNode(path, reader)
 
 
 
