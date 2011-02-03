@@ -3,7 +3,7 @@ import time
 import httplib
 from urllib import urlencode
 from django.conf import settings
-from django.core import cache
+from django.core.cache import cache
 from graphite.node import LeafNode, BranchNode
 from graphite.logger import log
 

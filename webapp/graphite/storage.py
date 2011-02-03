@@ -46,7 +46,6 @@ class Store:
     # Group matching nodes by their path
     nodes_by_path = {}
     for node in matching_nodes:
-      log.info("matching node: %s" % node)
       if node.path not in nodes_by_path:
         nodes_by_path[node.path] = []
 
@@ -54,7 +53,6 @@ class Store:
 
     # Reduce matching nodes for each path to a minimal set
     for path, nodes in nodes_by_path.iteritems():
-      log.info("path=%s  nodes=%s" % (path, str(nodes)))
       leaf_nodes = []
 
       # First we dispense with the BranchNodes
