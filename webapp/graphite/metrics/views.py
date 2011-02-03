@@ -55,9 +55,9 @@ def find_view(request):
   else:
     store = STORE
 
+  log.info("received remote find request: pattern=%s from=%s until=%s local_only=%s format=%s" % (query, fromTime, untilTime, local_only, format))
   matches = list( store.find(query, fromTime, untilTime) )
   matches.sort(key=lambda node: node.name)
-  log.info("FindRequest: query=%s from=%s until=%s local_only=%s, found %d matches" % (query, fromTime, untilTime, local_only, len(matches)))
 
   if format == 'treejson':
     content = tree_json(matches, base_path, wildcards=profile.advancedUI or wildcards)
