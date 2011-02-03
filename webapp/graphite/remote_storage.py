@@ -3,6 +3,7 @@ import time
 import httplib
 from urllib import urlencode
 from django.conf import settings
+from django.core import cache
 from graphite.node import LeafNode, BranchNode
 from graphite.logger import log
 
@@ -35,8 +36,27 @@ class FindRequest:
     self.connection = None
     self.failed = False
 
+    if query.startTime:
+      start = query.startTime - (query.startTime % settings.FIND_CACHE_DURATION)
+    else:
+      start = ""
+
+    if query.endTime:
+      end = query.endTime - (query.endTime % settings.FIND_CACHE_DURATION)
+    else:
+      end = ""
+
+    self.cacheKey = "find:%s:%s:%s:%s" % (store.host, query.pattern, start, end)
+    self.cachedResult = None
+
   def send(self):
     log.info("FindRequest.send(host=%s, query=%s) called" % (self.store.host, self.query))
+
+    self.cachedResult = cache.get(self.cacheKey)
+    if self.cachedResult is not None:
+      log.cache("FindRequest(host=%s, query=%s) using cached result" % (self.store.host, self.query))
+      return
+
     self.connection = HTTPConnectionWithTimeout(self.store.host)
     self.connection.timeout = settings.REMOTE_FIND_TIMEOUT
 
@@ -64,19 +84,24 @@ class FindRequest:
     if self.failed:
       return
 
-    if self.connection is None:
-      self.send()
+    if self.cachedResult is not None:
+      results = self.cachedResult
+    else:
+      if self.connection is None:
+        self.send()
 
-    try:
-      response = self.connection.getresponse()
-      assert response.status == 200, "received error response %s - %s" % (response.status, response.reason)
-      result_data = response.read()
-      results = pickle.loads(result_data)
+      try:
+        response = self.connection.getresponse()
+        assert response.status == 200, "received error response %s - %s" % (response.status, response.reason)
+        result_data = response.read()
+        results = pickle.loads(result_data)
 
-    except:
-      log.exception("FindRequest.get_results(host=%s, query=%s) exception processing response" % (self.store.host, self.query))
-      self.store.fail()
-      return
+      except:
+        log.exception("FindRequest.get_results(host=%s, query=%s) exception processing response" % (self.store.host, self.query))
+        self.store.fail()
+        return
+
+      cache.set(self.cacheKey, results, settings.FIND_CACHE_DURATION)
 
     for node_info in results:
       if node_info['is_leaf']:
