@@ -35,10 +35,7 @@ class MultiReader:
     results = [ n.fetch(startTime, endTime) for n in self.nodes ]
     return reduce(self.merge, results)
 
-  def merge(self, results1, results2): #XXX
-    if results1[0][2] == results2[0][2]:
-      return self.same_step_merge(results1, results2) # common case, cheaper
-
+  def merge(self, results1, results2):
     # Ensure results1 is finer than results2
     if results1[0][2] > results2[0][2]:
       results1, results2 = results2, results1
@@ -51,31 +48,34 @@ class MultiReader:
     step   = step1                # finest step
     start  = min(start1, start2)  # earliest start
     end    = max(end1, end2)      # latest end
+    time_info = (start, end, step)
     values = []
 
-    # Walk our time cursor t through both time ranges
     t = start
     while t < end:
-      # 
-      if t >= start1:
-        i = 
+      # Look for the finer precision value first if available
+      i1 = (t - start1) / step1
+
+      if len(values1) > i1:
+        v1 = values1[i1]
+      else:
+        v1 = None
+
+      if v1 is None:
+        i2 = (t - start2) / step2
+
+        if len(values2) > i2:
+          v2 = values2[i2]
+        else:
+          v2 = None
+
+        values.append(v2)
+      else:
+        values.append(v1)
 
       t += step
 
-  def same_step_merge(results1, results2):
-    # Ensure results1 starts no later than results2
-    if results1[0][0] > results2[0][0]:
-      results1, results2 = results2, results1
-
-    time_info1, values1 = results1
-    time_info2, values2 = results2
-    start1, end1, step = time_info1
-    start2, end2, step = time_info2
-    offset = (start2 - start1) / step
-    values = values1
-
-    #XXX
-
+    return (time_info, values)
 
 
 class CeresReader:

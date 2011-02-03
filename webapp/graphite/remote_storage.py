@@ -33,6 +33,7 @@ class FindRequest:
     self.store = store
     self.query = query
     self.connection = None
+    self.failed = False
 
   def send(self):
     log.info("FindRequest.send(host=%s, query=%s) called" % (self.store.host, self.query))
@@ -55,12 +56,14 @@ class FindRequest:
     try:
       self.connection.request('GET', '/metrics/find/?' + query_string)
     except:
-      log.exception("FindRequest.send(host=%s, query=%s) exception during request\n%s" % (self.store.host, self.query))
+      log.exception("FindRequest.send(host=%s, query=%s) exception during request" % (self.store.host, self.query))
       self.store.fail()
-      if not self.suppressErrors:
-        raise
+      self.failed = True
 
   def get_results(self):
+    if self.failed:
+      return
+
     if self.connection is None:
       self.send()
 
