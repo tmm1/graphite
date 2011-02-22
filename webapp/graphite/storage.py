@@ -81,7 +81,7 @@ class Store:
           break
 
         nodes_remaining.remove(best_node)
-        minimal_node_set.add(node)
+        minimal_node_set.add(best_node)
         covered_intervals = covered_intervals.union(node.intervals)
 
       # Sometimes the requested interval falls within the caching window.
