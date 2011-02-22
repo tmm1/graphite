@@ -123,7 +123,8 @@ class RemoteReader:
   def fetch(self, startTime, endTime):
     query_params = [
       ('target', self.metric_path),
-      ('pickle', 'true'),
+      ('format', 'pickle'),
+      ('local', '1'),
       ('from', str( int(startTime) )),
       ('until', str( int(endTime) ))
     ]

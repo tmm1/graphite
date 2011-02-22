@@ -14,7 +14,7 @@ limitations under the License."""
 
 import time
 from graphite.logger import log
-from graphite.storage import STORE
+from graphite.storage import STORE, LOCAL_STORE
 
 
 
@@ -93,7 +93,12 @@ def fetchData(requestContext, pathExpr):
   startTime = time.mktime( requestContext['startTime'].timetuple() )
   endTime   = time.mktime( requestContext['endTime'].timetuple() )
 
-  for node in STORE.find(pathExpr):
+  if requestContext['localOnly']:
+    store = LOCAL_STORE
+  else:
+    store = STORE
+
+  for node in store.find(pathExpr):
     log.metric_access(node.path)
     (timeInfo, values) = node.fetch(startTime, endTime)
     (start, end, step) = timeInfo

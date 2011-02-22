@@ -45,6 +45,7 @@ def renderView(request):
   requestContext = {
     'startTime' : requestOptions['startTime'],
     'endTime' : requestOptions['endTime'],
+    'localOnly' : requestOptions['localOnly'],
     'data' : []
   }
   data = requestContext['data']
@@ -104,8 +105,10 @@ def renderView(request):
     if useCache:
       cache.set(dataKey, data)
 
+    format = requestOptions.get('format')
+
     # If data is all we needed, we're done
-    if 'pickle' in requestOptions:
+    if format == 'pickle':
       response = HttpResponse(mimetype='application/pickle')
       seriesInfo = [series.getInfo() for series in data]
       pickle.dump(seriesInfo, response, protocol=-1)
@@ -113,7 +116,7 @@ def renderView(request):
       log.rendering('Total pickle rendering time %.6f' % (time() - start))
       return response
 
-    if requestOptions.get('format') == 'csv':
+    if format == 'csv':
       response = HttpResponse(mimetype='text/csv')
       writer = csv.writer(response, dialect='excel')
 
@@ -124,7 +127,7 @@ def renderView(request):
 
       return response
 
-    if 'rawData' in requestOptions:
+    if format == 'raw':
       response = HttpResponse(mimetype='text/plain')
       for series in data:
         response.write( "%s,%d,%d,%d|" % (series.name, series.start, series.end, series.step) )
@@ -172,13 +175,15 @@ def parseOptions(request):
     requestOptions['targets'].append(target)
 
   if 'pickle' in queryParams:
-    requestOptions['pickle'] = True
+    requestOptions['format'] = 'pickle'
   if 'rawData' in queryParams:
-    requestOptions['rawData'] = True
+    requestOptions['format'] = 'raw'
   if 'format' in queryParams:
     requestOptions['format'] = queryParams['format']
   if 'noCache' in queryParams:
     requestOptions['noCache'] = True
+
+  requestOptions['localOnly'] = queryParams.get('local') == '1'
 
   # Fill in the graphOptions
   for opt in graphClass.customizable:
