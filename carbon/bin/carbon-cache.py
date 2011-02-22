@@ -138,6 +138,10 @@ from carbon.instrumentation import startRecordingCacheMetrics
 from carbon.events import metricReceived
 from carbon.util import daemonize, dropprivs, startListener
 
+storage_schemas = join(CONF_DIR, 'storage-schemas.conf')
+if not exists(storage_schemas):
+  print "Error: missing required config %s" % storage_schemas
+  sys.exit(1)
 
 use_amqp = settings.get("ENABLE_AMQP", False)
 if use_amqp:
