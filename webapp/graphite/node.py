@@ -1,4 +1,3 @@
-from graphite.intervals import IntervalSet, Interval
 
 
 class Node:
