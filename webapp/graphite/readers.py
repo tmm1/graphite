@@ -99,21 +99,20 @@ class CeresReader:
     values = list(data.values)
 
     # Merge in data from carbon's cache
-    if data.endTime < endTime:
+    try:
+      cached_datapoints = CarbonLink.query(self.real_metric_path)
+    except:
+      log.exception("Failed CarbonLink query '%s'" % self.real_metric_path)
+      cached_datapoints = []
+
+    for (timestamp, value) in cached_datapoints:
+      interval = timestamp - (timestamp % data.timeStep)
+
       try:
-        cached_datapoints = CarbonLink.query(self.real_metric_path)
+        i = int(interval - data.startTime) / data.timeStep
+        values[i] = value
       except:
-        log.exception("Failed CarbonLink query '%s'" % self.real_metric_path)
-        cached_datapoints = []
-
-      for (timestamp, value) in cached_datapoints:
-        interval = timestamp - (timestamp % data.timeStep)
-
-        try:
-          i = int(interval - data.startTime) / data.timeStep
-          values[i] = value
-        except:
-          pass
+        pass
 
     return (time_info, values)
 
@@ -126,7 +125,7 @@ class WhisperReader:
 
   def get_intervals(self):
     start = time.time() - whisper.info(self.fs_path)['maxRetention']
-    end = os.stat(self.fs_path).st_mtime
+    end = max( os.stat(self.fs_path).st_mtime, start )
     return IntervalSet( [Interval(start, end)] )
 
   def fetch(self, startTime, endTime):
@@ -144,7 +143,7 @@ class GzippedWhisperReader(WhisperReader):
       fh.close()
 
     start = time.time() - info['maxRetention']
-    end = os.stat(self.fs_path).st_mtime
+    end = max( os.stat(self.fs_path).st_mtime, start )
     return IntervalSet( [Interval(start,end)] )
 
   def fetch(self, startTime, endTime):
@@ -164,7 +163,7 @@ class RRDReader:
 
   def get_intervals(self):
     start = time.time() - self.get_retention(self.fs_path)
-    end = os.stat(self.fs_path).st_mtime
+    end = max( os.stat(self.fs_path).st_mtime, start )
     return IntervalSet( [Interval(start, end)] )
 
   def fetch(self, startTime, endTime):

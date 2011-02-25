@@ -7,6 +7,12 @@ class IntervalSet:
     self.intervals = union_overlapping(intervals)
     self.size = sum(i.size for i in self.intervals)
 
+  def __repr__(self):
+    return repr(self.intervals)
+
+  def __iter__(self):
+    return iter(self.intervals)
+
   def __nonzero__(self):
     return self.size != 0
 
