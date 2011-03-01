@@ -13,8 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License."""
 
 import time
-from graphite.logger import log
-from graphite.storage import STORE, LOCAL_STORE
+from graphite.storage import STORE
 
 
 
@@ -93,15 +92,10 @@ def fetchData(requestContext, pathExpr):
   startTime = time.mktime( requestContext['startTime'].timetuple() )
   endTime   = time.mktime( requestContext['endTime'].timetuple() )
 
-  if requestContext['localOnly']:
-    store = LOCAL_STORE
-  else:
-    store = STORE
-
-  for node in store.find(pathExpr):
-    log.metric_access(node.path)
+  for node in STORE.find(pathExpr, local=requestContext['localOnly']):
     (timeInfo, values) = node.fetch(startTime, endTime)
     (start, end, step) = timeInfo
+
     series = TimeSeries(node.path, start, end, step, values)
     series.pathExpression = pathExpr #hack to pass expressions through to render functions
     seriesList.append(series)

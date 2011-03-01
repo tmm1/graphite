@@ -18,7 +18,7 @@ from django.conf import settings
 from graphite.account.models import Profile
 from graphite.util import getProfile, getProfileByUsername, defaultUser, json
 from graphite.logger import log
-from graphite.storage import STORE, LOCAL_STORE
+from graphite.storage import STORE
 
 try:
   import cPickle as pickle
@@ -50,13 +50,8 @@ def find_view(request):
   else:
     base_path = ''
 
-  if local_only:
-    store = LOCAL_STORE
-  else:
-    store = STORE
-
   log.info("received remote find request: pattern=%s from=%s until=%s local_only=%s format=%s" % (query, fromTime, untilTime, local_only, format))
-  matches = list( store.find(query, fromTime, untilTime) )
+  matches = list( STORE.find(query, fromTime, untilTime, local=local_only) )
   matches.sort(key=lambda node: node.name)
 
   if format == 'treejson':
@@ -68,9 +63,6 @@ def find_view(request):
     response = HttpResponse(content, mimetype='application/pickle')
 
   elif format == 'completer':
-    if len(matches) == 1 and (not matches[0].is_leaf) and query == matches[0].path + '*': # auto-complete children
-      matches = list( store.find(query + '.*') )
-
     content = json.dumps({ 'metrics' : [ dict(path=node.path, name=node.name) for node in matches ] })
     response = HttpResponse(content, mimetype='text/json')
 

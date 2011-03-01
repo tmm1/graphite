@@ -4,7 +4,7 @@ class Node:
   name = property(lambda self: self.path.split('.')[-1])
 
   def __repr__(self):
-    return '<%s: %s>' % (self.__class__.__name__, self.path)
+    return '<%s[%x]: %s>' % (self.__class__.__name__, id(self), self.path)
 
 
 class BranchNode(Node):

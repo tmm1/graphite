@@ -36,22 +36,22 @@ THIRDPARTY_DIR = WEB_DIR + 'thirdparty/'
 sys.path.insert(0, THIRDPARTY_DIR)
 sys.path.insert(0, WEBAPP_DIR)
 
-DATA_DIRS = [CERES_DIR]
 try:
   import ceres
 except ImportError:
   print >> sys.stderr, "FATAL ERROR: ceres module could not be loaded"
   raise
 
+STANDARD_DIRS = []
 try:
   import whisper
-  DATA_DIRS.append(WHISPER_DIR)
+  STANDARD_DIRS.append(WHISPER_DIR)
 except ImportError:
   print >> sys.stderr, "WARNING: whisper module could not be loaded, whisper support disabled"
 
 try:
   import rrdtool
-  DATA_DIRS.append(RRD_DIR)
+  STANDARD_DIRS.append(RRD_DIR)
 except ImportError:
   pass
 

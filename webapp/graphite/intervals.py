@@ -3,8 +3,14 @@ NEGATIVE_INFINITY = -INFINITY
 
 
 class IntervalSet:
-  def __init__(self, intervals):
-    self.intervals = union_overlapping(intervals)
+  __slots__ = ('intervals', 'size')
+
+  def __init__(self, intervals, disjoint=False):
+    self.intervals = sorted(intervals)
+
+    if not disjoint:
+      self.intervals = union_overlapping(self.intervals)
+
     self.size = sum(i.size for i in self.intervals)
 
   def __repr__(self):
@@ -21,10 +27,9 @@ class IntervalSet:
 
   def complement(self):
     complementary = set()
-    ordered = sorted(self.intervals, key=lambda i: i.start)
     cursor = NEGATIVE_INFINITY
 
-    for interval in ordered:
+    for interval in self.intervals:
       if cursor < interval.start:
         complementary.add( Interval(cursor, interval.start) )
         cursor = interval.end
@@ -32,39 +37,39 @@ class IntervalSet:
     if cursor < INFINITY:
       complementary.add( Interval(cursor, INFINITY) )
 
-    return IntervalSet(complementary)
+    return IntervalSet(complementary, disjoint=True)
 
-  def intersect(self, other):
-    intersections = [i.intersect(j) for i in self.intervals
-                                    for j in other.intervals
-                                    if i.intersect(j)]
-    return IntervalSet(intersections)
+  def intersect(self, other): #XXX The last major bottleneck. Factorial-time hell.
+    if (not self) or (not other):
+      return IntervalSet([])
+
+    earliest = max(self.intervals[0].start, other.intervals[0].start)
+    latest = min(self.intervals[-1].end, other.intervals[-1].end)
+
+    mine = [i for i in self.intervals if i.start >= earliest and i.end <= latest]
+    theirs = [i for i in other.intervals if i.start >= earliest and i.end <= latest]
+
+    intersections = [x for x in (i.intersect(j)
+                                 for i in self.intervals
+                                 for j in other.intervals)
+                     if x]
+
+    return IntervalSet(intersections, disjoint=True)
 
   def intersect_interval(self, interval):
-    intersections = [ i.intersect(interval) for i in self.intervals 
-                                            if i.intersect(interval) ]
-    return IntervalSet(intersections)
+    intersections = [x for x in (i.intersect(interval)
+                                 for i in self.intervals)
+                     if x]
+    return IntervalSet(intersections, disjoint=True)
 
   def union(self, other):
-    return IntervalSet(self.intervals | other.intervals)
-
-  def subset_of(self, other):
-    for myInterval in self.intervals:
-      subset_of_other = False
-
-      for theirInterval in other.intervals:
-        if myInterval.subset_of(theirInterval):
-          subset_of_other = True
-          break
-
-      if not subset_of_other:
-        return False
-
-    return True
+    return IntervalSet(self.intervals + other.intervals)
 
 
 
 class Interval:
+  __slots__ = ('start', 'end', 'tuple', 'size')
+
   def __init__(self, start, end):
     if end - start < 0:
       raise ValueError("Invalid interval start=%s end=%s" % (start, end))
@@ -79,6 +84,9 @@ class Interval:
 
   def __hash__(self):
     return hash( self.tuple )
+
+  def __cmp__(self, other):
+    return cmp(self.start, other.start)
 
   def __len__(self):
     raise TypeError("len() doesn't support infinite values, use the 'size' attribute instead")
@@ -109,33 +117,15 @@ class Interval:
     end = max(self.end, other.end)
     return Interval(start, end)
 
-  def subset_of(self, other):
-    return (self.start >= other.start and self.end <= other.end)
-
-  def spanning_to(self, other):
-    start = min(self.start, other.start)
-    end = max(self.end, other.end)
-    return Interval(start, end)
-
-
 
 def union_overlapping(intervals):
   """Union any overlapping intervals in the given set."""
-  intervals = set(intervals)
-  disjoint_intervals = set()
+  disjoint_intervals = []
 
-  while intervals:
-    selected = intervals.pop()
-    selected_is_disjoint = True
-
-    for other in intervals:
-      if selected.overlaps(other):
-        intervals.remove(other)
-        intervals.add( selected.union(other) )
-        selected_is_disjoint = False
-        break
-
-    if selected_is_disjoint:
-      disjoint_intervals.add(selected)
+  for interval in intervals:
+    if not disjoint_intervals or interval.start > disjoint_intervals[-1].end:
+      disjoint_intervals.append(interval)
+    elif interval.end > disjoint_intervals[-1].end:
+      disjoint_intervals[-1] = Interval(disjoint_intervals[-1].start, interval.end)
 
   return disjoint_intervals

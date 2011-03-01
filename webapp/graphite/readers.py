@@ -144,7 +144,7 @@ class GzippedWhisperReader(WhisperReader):
 
     start = time.time() - info['maxRetention']
     end = max( os.stat(self.fs_path).st_mtime, start )
-    return IntervalSet( [Interval(start,end)] )
+    return IntervalSet( [Interval(start, end)] )
 
   def fetch(self, startTime, endTime):
     fh = gzip.GzipFile(self.fs_path, 'rb')

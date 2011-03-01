@@ -12,6 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License."""
 
+import socket
+import errno
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.models import User
 from graphite.account.models import Profile
@@ -49,6 +51,28 @@ def getProfileByUsername(username):
     return Profile.objects.get(user=user)
   except ObjectDoesNotExist:
     return None
+
+
+def is_local_interface(host):
+  if ':' in host:
+    host = host.split(':',1)[0]
+
+  for port in xrange(1025, 65535):
+    try:
+      sock = socket.socket()
+      sock.bind( (host,port) )
+      sock.close()
+
+    except socket.error, e:
+      if e.args[0] == errno.EADDRNOTAVAIL:
+        return False
+      else:
+        continue
+
+    else:
+      return True
+
+  raise Exception("Failed all attempts at binding to interface %s, last exception was %s" % (host, e))
 
 
 try:
