@@ -28,8 +28,10 @@ class MultiReader:
     self.nodes = nodes
 
   def get_intervals(self):
-    interval_sets = [ n.intervals for n in self.nodes ]
-    return reduce(IntervalSet.union, interval_sets)
+    interval_sets = []
+    for node in self.nodes:
+      interval_sets.extend( node.intervals.intervals )
+    return IntervalSet(interval_sets)
 
   def fetch(self, startTime, endTime): #TODO allow for parallelism in RemoteReader.fetch() calls (threads?)
     results = [ n.fetch(startTime, endTime) for n in self.nodes ]

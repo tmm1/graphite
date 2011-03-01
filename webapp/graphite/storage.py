@@ -90,11 +90,9 @@ class Store:
         if distance_to_requested_interval(best_candidate) <= settings.FIND_TOLERANCE:
           minimal_node_set.add(best_candidate)
 
-      #if minimal_node_set:
-      #  reader = MultiReader(minimal_node_set)
-      #  yield LeafNode(path, reader)
-      for n in minimal_node_set:
-        yield n
+      if minimal_node_set:
+        reader = MultiReader(minimal_node_set)
+        yield LeafNode(path, reader)
 
 
 

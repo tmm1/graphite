@@ -125,6 +125,7 @@ class RemoteReader:
       ('target', self.metric_path),
       ('format', 'pickle'),
       ('local', '1'),
+      ('noCache', '1'),
       ('from', str( int(startTime) )),
       ('until', str( int(endTime) ))
     ]
