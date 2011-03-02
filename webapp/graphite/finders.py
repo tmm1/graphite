@@ -70,7 +70,7 @@ class StandardFinder:
 
             else:
               for datasource_name in RRDReader.get_datasources(absolute_path):
-                if fnmatch.fnmatch(datasource_name, datasource_pattern):
+                if match_entries([datasource_name], datasource_pattern):
                   reader = RRDReader(absolute_path, datasource_name)
                   yield LeafNode(metric_path, reader)
 
@@ -82,12 +82,12 @@ class StandardFinder:
     entries = os.listdir(current_dir)
 
     subdirs = [e for e in entries if isdir( join(current_dir,e) )]
-    matching_subdirs = fnmatch.filter(subdirs, pattern)
+    matching_subdirs = match_entries(subdirs, pattern)
     matching_subdirs.sort()
 
     if len(patterns) == 1 and RRDReader.supported: #the last pattern may apply to RRD data sources
       files = [e for e in entries if isfile( join(current_dir,e) )]
-      rrd_files = fnmatch.filter(files, pattern + ".rrd")
+      rrd_files = match_entries(files, pattern + ".rrd")
       rrd_files.sort()
 
       if rrd_files: #let's assume it does
@@ -106,7 +106,7 @@ class StandardFinder:
 
     else: #we've got the last pattern
       files = [e for e in entries if isfile( join(current_dir,e) )]
-      matching_files = fnmatch.filter(files, pattern + '.*')
+      matching_files = match_entries(files, pattern + '.*')
       matching_files.sort()
 
       for basename in matching_subdirs + matching_files:
@@ -129,3 +129,22 @@ def get_real_metric_path(absolute_path, metric_path):
     return fs_to_metric( relative_real_fs_path )
 
   return metric_path
+
+
+def match_entries(entries, pattern):
+  """A drop-in replacement for fnmatch.filter that supports pattern
+  variants (ie. {foo,bar}baz = foobaz or barbaz)."""
+  v1, v2 = pattern.find('{'), pattern.find('}')
+
+  if v1 > -1 and v2 > v1:
+    variations = pattern[v1+1:v2].split(',')
+    variants = [ pattern[:v1] + v + pattern[v2+1:] for v in variations ]
+    matching = []
+
+    for variant in variants:
+      matching.extend( fnmatch.filter(entries, variant) )
+
+    return list( set(matching) ) #remove potential dupes
+
+  else:
+    return fnmatch.filter(entries, pattern)
