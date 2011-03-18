@@ -1,5 +1,6 @@
 import time
 from django.conf import settings
+from django.core.cache import cache
 from graphite.logger import log
 from graphite.util import is_local_interface
 from graphite.remote_storage import RemoteStore
@@ -16,8 +17,27 @@ class Store:
     self.remote_stores = [ RemoteStore(host) for host in remote_hosts ]
 
 
-  def find(self, pattern, startTime=None, endTime=None, local=False):
+  def find(self, pattern, startTime=None, endTime=None, local=False, use_cache=True):
     query = FindQuery(pattern, startTime, endTime)
+
+    # First we see if this request is cached
+    if use_cache:
+      if query.startTime:
+        start = query.startTime - (query.startTime % settings.FIND_CACHE_DURATION)
+      else:
+        start = ""
+
+      if query.endTime:
+        end = query.endTime - (query.endTime % settings.FIND_CACHE_DURATION)
+      else:
+        end = ""
+
+      cache_key = "find:*:%s:%s:%s" % (query.pattern, start, end)
+      cached_results = cache.get(cache_key)
+      if cached_results:
+        return cached_results
+
+    results = []
 
     # Start remote searches
     if not local:
@@ -55,7 +75,7 @@ class Store:
         if node.is_leaf:
           leaf_nodes.append(node)
         else: #TODO need to filter branch nodes based on requested interval... how?!?!?
-          yield node
+          results.append(node)
 
       if not leaf_nodes:
         continue
@@ -92,7 +112,13 @@ class Store:
 
       if minimal_node_set:
         reader = MultiReader(minimal_node_set)
-        yield LeafNode(path, reader)
+        results.append( LeafNode(path, reader) )
+
+
+    if use_cache:
+      cache.set(cache_key, results, settings.FIND_CACHE_DURATION)
+
+    return results
 
 
 

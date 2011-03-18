@@ -62,6 +62,7 @@ class FindRequest:
 
     query_params = [
       ('local', '1'),
+      ('use_cache', '0'),
       ('format', 'pickle'),
       ('query', self.query.pattern),
     ]

@@ -31,6 +31,7 @@ def find_view(request):
   profile = getProfile(request)
   format = request.REQUEST.get('format', 'treejson')
   local_only = int( request.REQUEST.get('local', 0) )
+  use_cache = int( request.REQUEST.get('use_cache', 1) )
   wildcards = int( request.REQUEST.get('wildcards', 0) )
   fromTime = int( request.REQUEST.get('from', -1) )
   untilTime = int( request.REQUEST.get('until', -1) )
@@ -50,8 +51,8 @@ def find_view(request):
   else:
     base_path = ''
 
-  log.info("received remote find request: pattern=%s from=%s until=%s local_only=%s format=%s" % (query, fromTime, untilTime, local_only, format))
-  matches = list( STORE.find(query, fromTime, untilTime, local=local_only) )
+  log.info("received remote find request: pattern=%s from=%s until=%s local_only=%s use_cache=%s format=%s" % (query, fromTime, untilTime, local_only, use_cache, format))
+  matches = list( STORE.find(query, fromTime, untilTime, local=local_only, use_cache=use_cache) )
   matches.sort(key=lambda node: node.name)
 
   if format == 'treejson':
