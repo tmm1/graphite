@@ -93,7 +93,12 @@ def fetchData(requestContext, pathExpr):
   endTime   = time.mktime( requestContext['endTime'].timetuple() )
 
   for node in STORE.find(pathExpr, local=requestContext['localOnly']):
-    (timeInfo, values) = node.fetch(startTime, endTime)
+    results = node.fetch(startTime, endTime)
+    if not results:
+      log.info("render.datalib.fetchData :: no results for %s.fetch(%s, %s)" % (node, startTime, endTime))
+      continue
+
+    (timeInfo, values) = results
     (start, end, step) = timeInfo
 
     series = TimeSeries(node.path, start, end, step, values)

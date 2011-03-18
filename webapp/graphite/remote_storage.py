@@ -105,24 +105,27 @@ class FindRequest:
 
     for node_info in results:
       if node_info['is_leaf']:
-        reader = RemoteReader(self.store, node_info)
+        reader = RemoteReader(self.store, node_info, bulk_query=self.query.pattern)
         yield LeafNode(node_info['path'], reader)
       else:
         yield BranchNode(node_info['path'])
 
 
 class RemoteReader:
-  def __init__(self, store, node_info):
+  request_cache = {}
+
+  def __init__(self, store, node_info, bulk_query=None):
     self.store = store
     self.metric_path = node_info['path']
     self.intervals = node_info['intervals']
+    self.query = bulk_query or node_info['path']
 
   def get_intervals(self):
     return self.intervals
 
   def fetch(self, startTime, endTime):
     query_params = [
-      ('target', self.metric_path),
+      ('target', self.query),
       ('format', 'pickle'),
       ('local', '1'),
       ('noCache', '1'),
@@ -130,23 +133,50 @@ class RemoteReader:
       ('until', str( int(endTime) ))
     ]
     query_string = urlencode(query_params)
+    urlpath = '/render/?' + query_string
 
-    url = "http://%s/render/?%s" % (self.store.host, query_string)
-    log.info("RemoteReader.fetch %s" % url)
+    results = self.request_data(self.store, urlpath)
 
-    connection = HTTPConnectionWithTimeout(self.store.host)
+    for series in results:
+      if series.name == self.metric_path:
+        time_info = (series['start'], series['end'], series['step'])
+        return (time_info, series['values'])
+
+  @classmethod
+  def request_data(cls, store, urlpath):
+    """This method allows multiple RemoteNodes (resulting from the same
+    FindRequest) to share a single /render/ call when fetching their data.
+    This is not thread-safe."""
+
+    url = "http://%s%s" % (store.host, urlpath)
+    cached_results = cls.request_cache.get(url)
+
+    if cached_results is not None:
+      return cached_results
+
+    if len(cls.request_cache) >= settings.REMOTE_READER_CACHE_SIZE_LIMIT:
+      log.info("RemoteReader.request_data :: clearing request_cache")
+      cls.request_cache.clear()
+
+    log.info("RemoteReader.request_data :: requesting %s" % url)
+    connection = HTTPConnectionWithTimeout(store.host)
     connection.timeout = settings.REMOTE_FETCH_TIMEOUT
-    connection.request('GET', '/render/?' + query_string)
-    response = connection.getresponse()
 
-    if response.status != 200:
-      raise Exception("Error response %d %s from %s" % (response.status, response.reason, url))
+    try:
+      connection.request('GET', urlpath)
+      response = connection.getresponse()
+      if response.status != 200:
+        raise Exception("Error response %d %s from %s" % (response.status, response.reason, url))
 
-    pickled_response = response.read()
-    series_list = pickle.loads(pickled_response)
-    series = series_list[0]
-    time_info = (series['start'], series['end'], series['step'])
-    return (time_info, series['values'])
+      pickled_response = response.read()
+      results = pickle.loads(pickled_response)
+      cls.request_cache[url] = results
+      return results
+
+    except:
+      log.exception("Error requesting %s" % url)
+      store.fail()
+      raise
 
 
 # This is a hack to put a timeout in the connect() of an HTTP request.
