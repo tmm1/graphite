@@ -138,7 +138,7 @@ class RemoteReader:
     results = self.request_data(self.store, urlpath)
 
     for series in results:
-      if series.name == self.metric_path:
+      if series['name'] == self.metric_path:
         time_info = (series['start'], series['end'], series['step'])
         return (time_info, series['values'])
 
