@@ -93,6 +93,9 @@ def fetchData(requestContext, pathExpr):
   endTime   = int( time.mktime( requestContext['endTime'].timetuple() ) )
 
   for node in STORE.find(pathExpr, startTime, endTime, local=requestContext['localOnly']):
+    if not node.is_leaf:
+      continue
+
     results = node.fetch(startTime, endTime)
     if not results:
       log.info("render.datalib.fetchData :: no results for %s.fetch(%s, %s)" % (node, startTime, endTime))
