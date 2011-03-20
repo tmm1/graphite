@@ -2,6 +2,7 @@
 
 class Node:
   name = property(lambda self: self.path.split('.')[-1])
+  local = True
 
   def __repr__(self):
     return '<%s[%x]: %s>' % (self.__class__.__name__, id(self), self.path)
@@ -24,3 +25,6 @@ class LeafNode(Node):
 
   def fetch(self, startTime, endTime):
     return self.reader.fetch(startTime, endTime)
+
+  def __repr__(self):
+    return '<LeafNode[%x]: %s (%s)>' % (id(self), self.path, self.reader)

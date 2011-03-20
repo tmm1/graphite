@@ -2,6 +2,7 @@ import socket
 import time
 import httplib
 from urllib import urlencode
+from threading import Lock
 from django.conf import settings
 from django.core.cache import cache
 from graphite.node import LeafNode, BranchNode
@@ -54,7 +55,7 @@ class FindRequest:
 
     self.cachedResult = cache.get(self.cacheKey)
     if self.cachedResult is not None:
-      log.cache("FindRequest(host=%s, query=%s) using cached result" % (self.store.host, self.query))
+      log.info("FindRequest(host=%s, query=%s) using cached result" % (self.store.host, self.query))
       return
 
     self.connection = HTTPConnectionWithTimeout(self.store.host)
@@ -107,19 +108,26 @@ class FindRequest:
     for node_info in results:
       if node_info['is_leaf']:
         reader = RemoteReader(self.store, node_info, bulk_query=self.query.pattern)
-        yield LeafNode(node_info['path'], reader)
+        node = LeafNode(node_info['path'], reader)
       else:
-        yield BranchNode(node_info['path'])
+        node = BranchNode(node_info['path'])
+
+      node.local = False
+      yield node
 
 
 class RemoteReader:
   request_cache = {}
+  cache_lock = Lock()
 
   def __init__(self, store, node_info, bulk_query=None):
     self.store = store
     self.metric_path = node_info['path']
     self.intervals = node_info['intervals']
     self.query = bulk_query or node_info['path']
+
+  def __repr__(self):
+    return '<RemoteReader[%x]: %s>' % (id(self), self.store.host)
 
   def get_intervals(self):
     return self.intervals
@@ -146,18 +154,22 @@ class RemoteReader:
   @classmethod
   def request_data(cls, store, urlpath):
     """This method allows multiple RemoteNodes (resulting from the same
-    FindRequest) to share a single /render/ call when fetching their data.
-    This is not thread-safe."""
+    FindRequest) to share a single /render/ call when fetching their data."""
 
-    url = "http://%s%s" % (store.host, urlpath)
-    cached_results = cls.request_cache.get(url)
+    cls.cache_lock.acquire()
+    try:
+      url = "http://%s%s" % (store.host, urlpath)
+      cached_results = cls.request_cache.get(url)
 
-    if cached_results is not None:
-      return cached_results
+      if cached_results is not None:
+        return cached_results
 
-    if len(cls.request_cache) >= settings.REMOTE_READER_CACHE_SIZE_LIMIT:
-      log.info("RemoteReader.request_data :: clearing request_cache")
-      cls.request_cache.clear()
+      if len(cls.request_cache) >= settings.REMOTE_READER_CACHE_SIZE_LIMIT:
+        log.info("RemoteReader.request_data :: clearing request_cache")
+        cls.request_cache.clear()
+
+    finally:
+      cls.cache_lock.release()
 
     log.info("RemoteReader.request_data :: requesting %s" % url)
     connection = HTTPConnectionWithTimeout(store.host)
@@ -171,7 +183,9 @@ class RemoteReader:
 
       pickled_response = response.read()
       results = pickle.loads(pickled_response)
+      cls.cache_lock.acquire()
       cls.request_cache[url] = results
+      cls.cache_lock.release()
       return results
 
     except:

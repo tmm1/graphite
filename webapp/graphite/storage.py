@@ -1,6 +1,5 @@
 import time
 from django.conf import settings
-from django.core.cache import cache
 from graphite.logger import log
 from graphite.util import is_local_interface
 from graphite.remote_storage import RemoteStore
@@ -17,27 +16,8 @@ class Store:
     self.remote_stores = [ RemoteStore(host) for host in remote_hosts ]
 
 
-  def find(self, pattern, startTime=None, endTime=None, local=False, use_cache=True):
+  def find(self, pattern, startTime=None, endTime=None, local=False):
     query = FindQuery(pattern, startTime, endTime)
-
-    # First we see if this request is cached
-    if use_cache:
-      if query.startTime:
-        start = query.startTime - (query.startTime % settings.FIND_CACHE_DURATION)
-      else:
-        start = ""
-
-      if query.endTime:
-        end = query.endTime - (query.endTime % settings.FIND_CACHE_DURATION)
-      else:
-        end = ""
-
-      cache_key = "find:*:%s:%s:%s" % (query.pattern, start, end)
-      cached_results = cache.get(cache_key)
-      if cached_results:
-        return cached_results
-
-    results = []
 
     # Start remote searches
     if not local:
@@ -48,14 +28,14 @@ class Store:
     # Search locally
     for finder in self.finders:
       for node in finder.find_nodes(query):
-        log.info("find() :: local :: %s" % node)
+        #log.info("find() :: local :: %s" % node)
         matching_nodes.add(node)
 
     # Gather remote search results
     if not local:
       for request in remote_requests:
         for node in request.get_results():
-          log.info("find() :: remote :: %s" % node)
+          #log.info("find() :: remote :: %s from %s" % (node,request.store.host))
           matching_nodes.add(node)
 
     # Group matching nodes by their path
@@ -67,6 +47,8 @@ class Store:
       nodes_by_path[node.path].append(node)
 
     # Reduce matching nodes for each path to a minimal set
+    found_branch_nodes = set()
+
     for path, nodes in nodes_by_path.iteritems():
       leaf_nodes = []
 
@@ -74,20 +56,41 @@ class Store:
       for node in nodes:
         if node.is_leaf:
           leaf_nodes.append(node)
-        else: #TODO need to filter branch nodes based on requested interval... how?!?!?
-          results.append(node)
+        elif node.path not in found_branch_nodes: #TODO need to filter branch nodes based on requested interval... how?!?!?
+          yield node
+          found_branch_nodes.add(node.path)
 
       if not leaf_nodes:
         continue
 
+      # Calculate best minimal node set
       minimal_node_set = set()
       covered_intervals = IntervalSet([])
 
+      # If the query doesn't fall entirely within the FIND_TOLERANCE window
+      # we disregard the window. This prevents unnecessary remote fetches
+      # caused when carbon's cache skews node.intervals, giving the appearance
+      # remote systems have data we don't have locally, which we probably do.
+      now = int( time.time() )
+      tolerance_window = now - settings.FIND_TOLERANCE
+      disregard_tolerance_window = query.interval.start < tolerance_window
+      prior_to_window = Interval( float('-inf'), tolerance_window )
+
       def measure_of_added_coverage(node):
         relevant_intervals = node.intervals.intersect_interval(query.interval)
+        if disregard_tolerance_window:
+          relevant_intervals = relevant_intervals.intersect_interval(prior_to_window)
         return covered_intervals.union(relevant_intervals).size - covered_intervals.size
 
       nodes_remaining = list(leaf_nodes)
+
+      # Prefer local nodes first
+      for node in leaf_nodes:
+        if node.local and measure_of_added_coverage(node) > 0:
+          nodes_remaining.remove(node)
+          minimal_node_set.add(node)
+          covered_intervals = covered_intervals.union(node.intervals)
+
       while nodes_remaining:
         best_node = max(nodes_remaining, key=measure_of_added_coverage)
 
@@ -112,13 +115,7 @@ class Store:
 
       if minimal_node_set:
         reader = MultiReader(minimal_node_set)
-        results.append( LeafNode(path, reader) )
-
-
-    if use_cache:
-      cache.set(cache_key, results, settings.FIND_CACHE_DURATION)
-
-    return results
+        yield LeafNode(path, reader)
 
 
 
