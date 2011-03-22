@@ -63,7 +63,6 @@ class FindRequest:
 
     query_params = [
       ('local', '1'),
-      ('use_cache', '0'),
       ('format', 'pickle'),
       ('query', self.query.pattern),
     ]
@@ -136,6 +135,7 @@ class RemoteReader:
     query_params = [
       ('target', self.query),
       ('format', 'pickle'),
+      ('pickle', '1'), # for backwards compatibility with 0.9.7
       ('local', '1'),
       ('noCache', '1'),
       ('from', str( int(startTime) )),
