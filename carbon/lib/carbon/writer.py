@@ -59,7 +59,7 @@ def writeCachedDataPoints():
       if node.readSlicesIfNeeded():
         log.msg("readSlices() performed on node: %s" % metric)
 
-      node.write(metric, datapoints)
+      node.write(datapoints)
       t2 = time.time()
     except:
       log.err()
