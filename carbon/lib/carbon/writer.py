@@ -26,6 +26,7 @@ from ceres import CeresTree
 
 
 Tree = CeresTree(settings.LOCAL_DATA_DIR)
+nodeCache = {}
 
 
 def writeCachedDataPoints():
@@ -33,25 +34,32 @@ def writeCachedDataPoints():
   lastSecond = 0
 
   for (metric, datapoints) in MetricCache.drain():
+    node = nodeCache.get(metric)
 
-    if not Tree.hasNode(metric):
-      matchingSchema = None
+    if node is None:
+      node = nodeCache[metric] = Tree.getNode(metric)
 
-      for schema in schemas:
-        if schema.matches(metric):
-          matchingSchema = schema
-          break
+      if node is None: # Create new node
+        matchingSchema = None
 
-      if matchingSchema is None:
-        raise Exception("No storage schema matched the metric '%s', check your storage-schemas.conf file." % metric)
+        for schema in schemas:
+          if schema.matches(metric):
+            matchingSchema = schema
+            break
 
-      Tree.createNode(metric, **matchingSchema.configuration)
-      log.creates("created new metric %s with schema=%s" % (metric, matchingSchema.configurationString))
-      increment('creates')
+        if matchingSchema is None:
+          raise Exception("No storage schema matched the metric '%s', check your storage-schemas.conf file." % metric)
+
+        node = nodeCache[metric] = Tree.createNode(metric, **matchingSchema.configuration)
+        log.creates("created new metric %s with schema=%s" % (metric, matchingSchema.configurationString))
+        increment('creates')
 
     try:
       t1 = time.time()
-      Tree.store(metric, datapoints)
+      if node.readSlicesIfNeeded():
+        log.msg("readSlices() performed on node: %s" % metric)
+
+      node.write(metric, datapoints)
       t2 = time.time()
     except:
       log.err()
