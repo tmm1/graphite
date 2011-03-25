@@ -198,6 +198,12 @@ if use_amqp:
                               exchange_name=amqp_exchange_name,
                               verbose=amqp_verbose)
 
+
+if settings.ENABLE_MANHOLE:
+  from carbon import manhole
+  manhole.start()
+
+
 startWriter()
 startRecordingCacheMetrics()
 

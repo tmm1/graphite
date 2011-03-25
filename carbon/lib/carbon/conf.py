@@ -31,6 +31,9 @@ defaults = dict(
   ENABLE_AMQP=False,
   AMQP_VERBOSE=False,
   BIND_PATTERNS=['#'],
+  ENABLE_MANHOLE=False,
+  MANHOLE_INTERFACE='127.0.0.1',
+  MANHOLE_PORT=7222,
   CLUSTER_MEMBERS=[],
 )
 
