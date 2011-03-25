@@ -6,6 +6,7 @@ from threading import Lock
 from django.conf import settings
 from django.core.cache import cache
 from graphite.node import LeafNode, BranchNode
+from graphite.intervals import Interval, IntervalSet
 from graphite.logger import log
 
 try:
@@ -108,6 +109,7 @@ class FindRequest:
       if 'isLeaf' in node_info: # 0.9.7 hacks
         node_info['is_leaf'] = node_info.pop('isLeaf')
         node_info['path'] = node_info.pop('metric_path')
+        node_info['intervals'] = IntervalSet([ Interval(*args) for args in node_info['intervals'] ])
 
       if node_info.get('is_leaf'):
         reader = RemoteReader(self.store, node_info, bulk_query=self.query.pattern)
