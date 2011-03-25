@@ -22,10 +22,11 @@ from carbon.storage import loadStorageSchemas
 from carbon.conf import settings
 from carbon.instrumentation import increment, append
 from carbon import log
-from ceres import CeresTree
+from ceres import CeresTree, setDefaultSliceCachingBehavior
 
 
 Tree = CeresTree(settings.LOCAL_DATA_DIR)
+setDefaultSliceCachingBehavior('latest')
 nodeCache = {}
 
 
@@ -56,9 +57,6 @@ def writeCachedDataPoints():
 
     try:
       t1 = time.time()
-      if node.readSlicesIfNeeded():
-        log.msg("readSlices() performed on node: %s" % metric)
-
       node.write(datapoints)
       t2 = time.time()
     except:

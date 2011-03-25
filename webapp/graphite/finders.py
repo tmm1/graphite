@@ -2,9 +2,12 @@ import os
 import fnmatch
 from os.path import islink, isdir, isfile, realpath, join, dirname, basename
 from glob import glob
-from ceres import CeresTree, CeresNode
+from ceres import CeresTree, CeresNode, setDefaultSliceCachingBehavior
 from graphite.node import BranchNode, LeafNode
 from graphite.readers import CeresReader, WhisperReader, GzippedWhisperReader, RRDReader
+
+
+#setDefaultSliceCachingBehavior('all')
 
 
 class CeresFinder:
