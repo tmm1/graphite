@@ -105,7 +105,11 @@ class FindRequest:
       cache.set(self.cacheKey, results, settings.FIND_CACHE_DURATION)
 
     for node_info in results:
-      if node_info.get('is_leaf') or node_info.get('isLeaf'):
+      if 'isLeaf' in node_info: # 0.9.7 hacks
+        node_info['is_leaf'] = node_info.pop('isLeaf')
+        node_info['path'] = node_info.pop('metric_path')
+
+      if node_info.get('is_leaf'):
         reader = RemoteReader(self.store, node_info, bulk_query=self.query.pattern)
         node = LeafNode(node_info['path'], reader)
       else:
