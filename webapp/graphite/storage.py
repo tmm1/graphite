@@ -76,17 +76,17 @@ class Store:
       disregard_tolerance_window = query.interval.start < tolerance_window
       prior_to_window = Interval( float('-inf'), tolerance_window )
 
-      def measure_of_added_coverage(node):
+      def measure_of_added_coverage(node, drop_window=disregard_tolerance_window):
         relevant_intervals = node.intervals.intersect_interval(query.interval)
-        if disregard_tolerance_window:
+        if drop_window:
           relevant_intervals = relevant_intervals.intersect_interval(prior_to_window)
         return covered_intervals.union(relevant_intervals).size - covered_intervals.size
 
       nodes_remaining = list(leaf_nodes)
 
-      # Prefer local nodes first
+      # Prefer local nodes first (and do *not* drop the tolerance window)
       for node in leaf_nodes:
-        if node.local and measure_of_added_coverage(node) > 0:
+        if node.local and measure_of_added_coverage(node, False) > 0:
           nodes_remaining.remove(node)
           minimal_node_set.add(node)
           covered_intervals = covered_intervals.union(node.intervals)
