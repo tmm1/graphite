@@ -1,27 +1,30 @@
 
 
-class Node:
-  name = property(lambda self: self.path.split('.')[-1])
-  local = True
+class Node(object):
+  __slots__ = ('name', 'path', 'local', 'is_leaf')
+
+  def __init__(self, path):
+    self.path = path
+    self.name = path.split('.')[-1]
+    self.local = True
+    self.is_leaf = False
 
   def __repr__(self):
     return '<%s[%x]: %s>' % (self.__class__.__name__, id(self), self.path)
 
 
 class BranchNode(Node):
-  is_leaf = False
-
-  def __init__(self, path):
-    self.path = path
+  pass
 
 
 class LeafNode(Node):
-  is_leaf = True
+  __slots__ = ('reader', 'intervals')
 
   def __init__(self, path, reader):
-    self.path = path
+    Node.__init__(self, path)
     self.reader = reader
     self.intervals = reader.get_intervals()
+    self.is_leaf = True
 
   def fetch(self, startTime, endTime):
     return self.reader.fetch(startTime, endTime)

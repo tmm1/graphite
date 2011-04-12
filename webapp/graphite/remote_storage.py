@@ -31,7 +31,10 @@ class RemoteStore(object):
     self.lastFailure = time.time()
 
 
-class FindRequest:
+class FindRequest(object):
+  __slots__ = ('store', 'query', 'connection',
+               'failed', 'cacheKey', 'cachedResult')
+
   def __init__(self, store, query):
     self.store = store
     self.query = query
@@ -121,7 +124,8 @@ class FindRequest:
       yield node
 
 
-class RemoteReader:
+class RemoteReader(object):
+  __slots__ = ('store', 'metric_path', 'intervals', 'query')
   request_cache = {}
   cache_lock = Lock()
 
@@ -168,8 +172,10 @@ class RemoteReader:
       cached_results = cls.request_cache.get(url)
 
       if cached_results is not None:
+        log.info("RemoteReader.request_cache hit  [%s]" % url)
         return cached_results
 
+      log.info("RemoteReader.request_cache miss [%s]" % url)
       if len(cls.request_cache) >= settings.REMOTE_READER_CACHE_SIZE_LIMIT:
         log.info("RemoteReader.request_data :: clearing request_cache")
         cls.request_cache.clear()

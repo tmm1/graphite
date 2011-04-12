@@ -23,7 +23,9 @@ except ImportError:
 
 
 
-class MultiReader:
+class MultiReader(object):
+  __slots__ = ('nodes',)
+
   def __init__(self, nodes):
     self.nodes = nodes
 
@@ -80,7 +82,8 @@ class MultiReader:
     return (time_info, values)
 
 
-class CeresReader:
+class CeresReader(object):
+  __slots__ = ('ceres_node', 'real_metric_path')
   supported = True
 
   def __init__(self, ceres_node, real_metric_path):
@@ -119,7 +122,8 @@ class CeresReader:
     return (time_info, values)
 
 
-class WhisperReader:
+class WhisperReader(object):
+  __slots__ = ('fs_path',)
   supported = bool(whisper)
 
   def __init__(self, fs_path):
