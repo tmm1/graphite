@@ -22,7 +22,7 @@ from carbon.storage import loadStorageSchemas
 from carbon.conf import settings
 from carbon.instrumentation import increment, append
 from carbon import log
-from ceres import CeresTree, setDefaultSliceCachingBehavior
+from ceres import CeresTree, setDefaultSliceCachingBehavior, NodeDeleted
 
 
 Tree = CeresTree(settings.LOCAL_DATA_DIR)
@@ -59,6 +59,9 @@ def writeCachedDataPoints():
       t1 = time.time()
       node.write(datapoints)
       t2 = time.time()
+    except NodeDeleted:
+      del nodeCache[metric]
+      continue
     except:
       log.err()
       increment('errors')
