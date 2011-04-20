@@ -15,10 +15,11 @@ else:
 storage_dirs = [ ('storage/whisper',[]), ('storage/lists',[]),
                  ('storage/log',[]), ('storage/rrd',[]) ]
 conf_files = [ ('conf', glob('conf/*')) ]
+plugin_files = [ ('plugins/maintenance', glob('plugins/maintenance/*.py')) ]
 
 setup(
   name='carbon',
-  version='0.9.8',
+  version='1.1.0',
   url='https://launchpad.net/graphite',
   author='Chris Davis',
   author_email='chrismd@gmail.com',
@@ -28,7 +29,7 @@ setup(
   package_dir={'' : 'lib'},
   scripts=glob('bin/*'),
   package_data={ 'carbon' : ['*.xml'] },
-  data_files=storage_dirs + conf_files,
-  install_requires=['twisted', 'txamqp'],
+  data_files=storage_dirs + conf_files + plugin_files,
+  install_requires=['twisted'],
   **setup_kwargs
 )
