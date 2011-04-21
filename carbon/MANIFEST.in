@@ -1,4 +1,5 @@
 recursive-include conf *
 recursive-include plugins *
+exclude conf/*.conf
 include LICENSE
 include lib/carbon/amqp0-8.xml
