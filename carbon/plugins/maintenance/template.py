@@ -1,7 +1,7 @@
 # Magical Variables
 #-------------------
 # log(message)
-# context = {}
+# get_storage_config(metric_path)
 
 
 

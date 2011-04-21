@@ -2,9 +2,9 @@ import time
 from ceres import CeresSlice, SliceDeleted
 
 
-
-def aggregate(node, datapoints): # Put your custom aggregation logic here
-  values = [d[1] for d in datapoints]
+def aggregate(node, datapoints):
+  "Put your custom aggregation logic here."
+  values = [value for (timestamp,value) in datapoints]
   return float(sum(values)) / len(values)
 
 
