@@ -23,14 +23,14 @@ try:
 except ImportError:
   import pickle
 
-from graphite.util import getProfileByUsername
+from graphite.util import getProfileByUsername, json
 from graphite.remote_storage import HTTPConnectionWithTimeout
 from graphite.logger import log
 from graphite.render.evaluator import evaluateTarget
 from graphite.render.attime import parseATTime
 from graphite.render.functions import PieFunctions
-from graphite.render.glyph import GraphTypes
 from graphite.render.hashing import hashRequest, hashData
+from graphite.render.glyph import GraphTypes
 
 from django.http import HttpResponse, HttpResponseServerError
 from django.core.cache import cache
@@ -125,6 +125,18 @@ def renderView(request):
           timestamp = localtime( series.start + (i * series.step) )
           writer.writerow( (series.name, strftime("%Y-%m-%d %H:%M:%S", timestamp), value) )
 
+      return response
+
+    if format == 'json':
+      series_data = []
+      for series in data:
+        timestamps = range(series.start, series.end, series.step)
+        datapoints = zip(series, timestamps)
+        series_data.append( dict(target=series.name, datapoints=datapoints) )
+
+      response = HttpResponse(content=json.dumps(series_data), mimetype='text/json')
+      response['Pragma'] = 'no-cache'
+      response['Cache-Control'] = 'no-cache'
       return response
 
     if format == 'raw':

@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License."""
 
 import time
+from graphite.logger import log
 from graphite.storage import STORE
-
 
 
 class TimeSeries(list):
@@ -80,7 +80,6 @@ class TimeSeries(list):
       'step' : self.step,
       'values' : list(self),
     }
-
 
 
 # Data retrieval API

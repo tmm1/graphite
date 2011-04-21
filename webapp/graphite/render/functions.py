@@ -487,16 +487,19 @@ def doStdDev(sumOfSquares, first, new, n, avg):
    return (math.sqrt((newSumOfSquares / float(n)) - (avg * avg)), newSumOfSquares)
 
 
-def stdev(requestContext, seriesList,time):
+def stdev(requestContext, seriesList, time):
   count = 0
   for series in seriesList:
     stddevs = TimeSeries("stddev(%s,%.1f)" % (series.name, float(time)), series.start, series.end, series.step, [])
     stddevs.pathExpression = "stddev(%s,%.1f)" % (series.name, float(time))
     avg = safeDiv(safeSum(series[:time]), time)
 
-    sumOfSquares = sum(map(lambda(x): x * x, [v for v in series[:time] if v is not None]))
-    (sd, sumOfSquares) = doStdDev(sumOfSquares, 0, 0, time, avg)
-    stddevs.append(sd)
+    if avg is not None:
+      sumOfSquares = sum(map(lambda(x): x * x, [v for v in series[:time] if v is not None]))
+      (sd, sumOfSquares) = doStdDev(sumOfSquares, 0, 0, time, avg)
+      stddevs.append(sd)
+    else:
+      stddevs.append(None)
 
     for (index, el) in enumerate(series[time:]):
       if el is None:
@@ -509,8 +512,11 @@ def stdev(requestContext, seriesList,time):
       s = safeSum([safeMul(time, avg), el, -toDrop])
       avg = safeDiv(s, time)
 
-      (sd, sumOfSquares) = doStdDev(sumOfSquares, toDrop, series[index+time], time, avg)
-      stddevs.append(sd)
+      if avg is not None:
+        (sd, sumOfSquares) = doStdDev(sumOfSquares, toDrop, series[index+time], time, avg)
+        stddevs.append(sd)
+      else:
+        stddevs.append(None)
 
     for i in range(0, time-1):
       stddevs.insert(0, None)
@@ -627,6 +633,70 @@ def summarize(requestContext, seriesList, intervalString):
     newSeries.pathExpression = newName
     results.append(newSeries)
 
+  return results
+
+
+def hitcount(requestContext, seriesList, intervalString):
+  """Estimate hit counts from a list of time series.
+
+  This function assumes the values in each time series represent
+  hits per second.  It calculates hits per some larger interval
+  such as per day or per hour.  This function is like summarize(),
+  except that it compensates automatically for different time scales
+  (so that a similar graph results from using either fine-grained
+  or coarse-grained records) and handles rarely-occurring events
+  gracefully.
+  """
+  results = []
+  delta = parseTimeOffset(intervalString)
+  interval = int(delta.seconds + (delta.days * 86400))
+
+  for series in seriesList:
+    length = len(series)
+    step = int(series.step)
+    bucket_count = int(math.ceil(float(series.end - series.start) / interval))
+    buckets = [[] for _ in range(bucket_count)]
+    newStart = int(series.end - bucket_count * interval)
+
+    for i, value in enumerate(series):
+      if value is None:
+        continue
+
+      start_time = int(series.start + i * step)
+      start_bucket, start_mod = divmod(start_time - newStart, interval)
+      end_time = start_time + step
+      end_bucket, end_mod = divmod(end_time - newStart, interval)
+
+      if end_bucket >= bucket_count:
+        end_bucket = bucket_count - 1
+        end_mod = interval
+
+      if start_bucket == end_bucket:
+        # All of the hits go to a single bucket.
+        if start_bucket >= 0:
+          buckets[start_bucket].append(value * (end_mod - start_mod))
+
+      else:
+        # Spread the hits among 2 or more buckets.
+        if start_bucket >= 0:
+          buckets[start_bucket].append(value * (interval - start_mod))
+        hits_per_bucket = value * interval
+        for j in range(start_bucket + 1, end_bucket):
+          buckets[j].append(hits_per_bucket)
+        if end_mod > 0:
+          buckets[end_bucket].append(value * end_mod)
+
+    newValues = []
+    for bucket in buckets:
+      if bucket:
+        newValues.append( sum(bucket) )
+      else:
+        newValues.append(None)
+
+    newName = 'hitcount(%s, "%s")' % (series.name, intervalString)
+    newSeries = TimeSeries(newName, newStart, series.end, interval, newValues)
+    newSeries.pathExpression = newName
+    results.append(newSeries)
 
   return results
 
@@ -668,6 +738,7 @@ SeriesFunctions = {
   'log' : log,
   'timeShift': timeShift,
   'summarize' : summarize,
+  'hitcount'  : hitcount,
 
   # Calculate functions
   'movingAverage' : movingAverage,

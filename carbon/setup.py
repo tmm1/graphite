@@ -14,7 +14,7 @@ else:
 
 storage_dirs = [ ('storage/whisper',[]), ('storage/lists',[]),
                  ('storage/log',[]), ('storage/rrd',[]) ]
-conf_files = [ ('conf', glob('conf/*')) ]
+conf_files = [ ('conf', glob('conf/*.example')) ]
 plugin_files = [ ('plugins/maintenance', glob('plugins/maintenance/*.py')) ]
 
 setup(
@@ -25,7 +25,7 @@ setup(
   author_email='chrismd@gmail.com',
   license='Apache Software License 2.0',
   description='Backend data caching and persistence daemon for Graphite',
-  packages=['carbon'],
+  packages=['carbon', 'carbon.aggregator'],
   package_dir={'' : 'lib'},
   scripts=glob('bin/*'),
   package_data={ 'carbon' : ['*.xml'] },

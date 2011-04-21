@@ -63,12 +63,42 @@ def find_view(request):
     response = HttpResponse(content, mimetype='application/pickle')
 
   elif format == 'completer':
-    content = json.dumps({ 'metrics' : [ dict(path=node.path, name=node.name) for node in matches ] })
+    results = [ dict(path=node.path, name=node.name) for node in matches ] })
+
+    if len(results) > 1 and wildcards:
+      wildcardNode = {'name' : '*'}
+      results.append(wildcardNode)
+
+    content = json.dumps({ 'metrics' : results })
     response = HttpResponse(content, mimetype='text/json')
 
   else:
     return HttpResponseBadRequest(content="Invalid value for 'format' parameter", mimetype="text/plain")
 
+  response['Pragma'] = 'no-cache'
+  response['Cache-Control'] = 'no-cache'
+  return response
+
+
+def expand_view(request):
+  "View for expanding a pattern into matching metric paths"
+  local_only = int( request.REQUEST.get('local', 0) )
+
+  if local_only:
+    store = LOCAL_STORE
+  else:
+    store = STORE
+
+  results = set()
+  for query in request.REQUEST.getlist('query'):
+    for node in store.find(query):
+      results.add( node.metric_path )
+
+  result = {
+    'results' : sorted(results)
+  }
+
+  response = HttpResponse(json.dumps(result), mimetype='text/json')
   response['Pragma'] = 'no-cache'
   response['Cache-Control'] = 'no-cache'
   return response
