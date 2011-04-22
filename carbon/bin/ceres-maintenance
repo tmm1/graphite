@@ -153,7 +153,7 @@ Plugin.context['PluginFail'] = PluginFail
 
 
 if __name__ == '__main__':
-  default_plugindir = join(root_dir, 'lib', 'ceres-plugins')
+  default_plugindir = join(root_dir, 'plugins', 'maintenance')
   parser = OptionParser(usage='''%prog [options] plugin [plugin2 ...] [key=val ...]''')
   parser.add_option('--daemon', action='store_true')
   parser.add_option('--log', help="Write to the given log file instead of stdout")

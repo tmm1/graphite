@@ -22,6 +22,7 @@ def relay(metric, datapoint):
 def getDestinationConnections(metric):
   if settings.RELAY_METHOD == 'rules':
     destinations = rules.getDestinations(metric)
+    destinations = [ (server, port) for (server, port, instance) in destinations ]
   else:
     destinations = hashing.getDestinations(metric)
 
