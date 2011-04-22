@@ -38,6 +38,7 @@ defaults = dict(
   MANHOLE_USER="",
   MANHOLE_PUBLIC_KEY="",
   RELAY_METHOD='rules',
+  AUTOFLUSH=False,
   CH_HOST_LIST=[],
 )
 

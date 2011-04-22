@@ -1,5 +1,5 @@
 [cache]
-LOCAL_DATA_DIR = /opt/graphite/storage/whisper/
+LOCAL_DATA_DIR = /opt/graphite/storage/ceres/
 
 # Specify the user to drop privileges to
 # If this is blank carbon runs as the user that invokes it
@@ -40,10 +40,10 @@ CACHE_QUERY_PORT = 7002
 # degrade performance if logging on the same volume as the whisper data is stored.
 LOG_UPDATES = False
 
-# On some systems it is desirable for whisper to write synchronously.
+# On some systems it is desirable for whisper/ceres to write synchronously.
 # Set this option to True if you'd like to try this. Basically it will
 # shift the onus of buffering writes from the kernel into carbon's cache.
-WHISPER_AUTOFLUSH = False
+AUTOFLUSH = False
 
 # Enable AMQP if you want to receve metrics using an amqp broker
 # ENABLE_AMQP = False
