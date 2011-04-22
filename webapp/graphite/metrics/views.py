@@ -63,7 +63,7 @@ def find_view(request):
     response = HttpResponse(content, mimetype='application/pickle')
 
   elif format == 'completer':
-    results = [ dict(path=node.path, name=node.name) for node in matches ] })
+    results = [ dict(path=node.path, name=node.name) for node in matches ]
 
     if len(results) > 1 and wildcards:
       wildcardNode = {'name' : '*'}
