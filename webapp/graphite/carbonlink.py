@@ -50,7 +50,7 @@ class CarbonLinkPool:
     self.send_request(conn, metric_path)
     results = self.recv_response(conn)
     log.cache("CarbonLink query for %s returned %d datapoints" % (metric_path, len(results)))
-    self.connection_pool.add(conn)
+    self.connections[host].add(conn)
     return results
 
   def send_request(self, conn, metric_path):
