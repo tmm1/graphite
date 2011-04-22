@@ -429,8 +429,8 @@ class LineGraph(Graph):
     self.area['xmin'] = x + self.margin + lineHeight
 
   def getYCoord(self, value):
-    highestValue = max(self.yLabelValues)
-    lowestValue = min(self.yLabelValues)
+    highestValue = self.yTop
+    lowestValue = self.yBottom
     pixelRange = self.area['ymax'] - self.area['ymin']
 
     relativeValue = value - lowestValue
@@ -1053,7 +1053,7 @@ def logrange(base, scale_min, scale_max):
   if scale_min > 0:
       current = math.floor(math.log(scale_min, base))
   factor = current
-  while current <= scale_max:
+  while current < scale_max:
      current = math.pow(base, factor)
      yield current
      factor += 1
