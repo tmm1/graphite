@@ -62,6 +62,7 @@ def compactHash(string):
 class ConsistentHashRing:
   def __init__(self, nodes, replica_count=100):
     self.ring = []
+    self.nodes = set()
     self.replica_count = replica_count
     for node in nodes:
       self.add_node(node)
@@ -72,6 +73,7 @@ class ConsistentHashRing:
     return small_hash
 
   def add_node(self, key):
+    self.nodes.add(key)
     for i in range(self.replica_count):
       replica_key = "%s:%d" % (key, i)
       position = self.compute_ring_position(replica_key)
@@ -79,6 +81,7 @@ class ConsistentHashRing:
       bisect.insort(self.ring, entry)
 
   def remove_node(self, key):
+    self.nodes.discard(key)
     self.ring = [entry for entry in self.ring if entry[1] != key]
 
   def get_node(self, key):
@@ -100,6 +103,6 @@ class ConsistentHashRing:
       if next_node not in nodes:
         nodes.append(next_node)
 
-      i = (i + 1) % len(self.ring)
+      index = (index + 1) % len(self.ring)
 
     return nodes

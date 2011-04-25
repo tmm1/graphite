@@ -28,7 +28,7 @@ class CarbonLinkPool:
 
   def select_host(self, metric):
     "Returns the carbon host that has data for the given metric"
-    nodes = self.hash_ring.get_nodes(metric)
+    nodes = self.hash_ring.get_nodes(metric)[:settings.REPLICATION_FACTOR]
     available = [ n for n in nodes if self.is_available(n) ]
     return random.choice(available or nodes)
 
