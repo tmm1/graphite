@@ -84,7 +84,22 @@ class ConsistentHashRing:
   def get_node(self, key):
     position = self.compute_ring_position(key)
     search_entry = (position, None)
-    index = bisect.bisect_left(self.ring, search_entry)
-    index %= len(self.ring)
+    index = bisect.bisect_left(self.ring, search_entry) % len(self.ring)
     entry = self.ring[index]
     return entry[1]
+
+  def get_nodes(self, key):
+    nodes = []
+    position = self.compute_ring_position(key)
+    search_entry = (position, None)
+    index = bisect.bisect_left(self.ring, search_entry) % len(self.ring)
+    last_index = (index - 1) % len(self.ring)
+    while len(nodes) < len(self.nodes) and index != last_index:
+      next_entry = self.ring[index]
+      (position, next_node) = next_entry
+      if next_node not in nodes:
+        nodes.append(next_node)
+
+      i = (i + 1) % len(self.ring)
+
+    return nodes

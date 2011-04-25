@@ -81,6 +81,7 @@ LOG_RENDERING_PERFORMANCE = False
 #Miscellaneous settings
 CARBONLINK_HOSTS = ["127.0.0.1:7002"]
 CARBONLINK_TIMEOUT = 1.0
+CARBONLINK_RETRY_DELAY = 15
 SMTP_SERVER = "localhost"
 DOCUMENTATION_URL = "http://graphite.wikidot.com/documentation"
 ALLOW_ANONYMOUS_CLI = True

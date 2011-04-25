@@ -24,7 +24,7 @@ def getDestinationConnections(metric):
     destinations = rules.getDestinations(metric)
     destinations = [ (server, port) for (server, port, instance) in destinations ]
   else:
-    destinations = hashing.getDestinations(metric)
+    destinations = list( hashing.getDestinations(metric) )
 
   for connection in clientConnections:
     if connection.remoteAddr in destinations:

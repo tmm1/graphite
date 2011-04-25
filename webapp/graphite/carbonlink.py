@@ -1,6 +1,8 @@
+import time
 import socket
 import struct
 import errno
+import random
 from select import select
 from django.conf import settings
 from graphite.render.hashing import ConsistentHashRing
@@ -19,13 +21,21 @@ class CarbonLinkPool:
     self.timeout = float(timeout)
     self.hash_ring = ConsistentHashRing(self.hosts)
     self.connections = {}
+    self.last_failure = {}
     # Create a connection pool for each host
     for host in self.hosts:
       self.connections[host] = set()
 
   def select_host(self, metric):
     "Returns the carbon host that has data for the given metric"
-    return self.hash_ring.get_node(metric)
+    nodes = self.hash_ring.get_nodes(metric)
+    available = [ n for n in nodes if self.is_available(n) ]
+    return random.choice(available or nodes)
+
+  def is_available(self, host):
+    now = time.time()
+    last_fail = self.last_failure.get(host, 0)
+    return (now - last_fail) < settings.CARBONLINK_RETRY_DELAY
 
   def get_connection(self, host):
     # First try to take one out of the pool for this host
@@ -40,18 +50,28 @@ class CarbonLinkPool:
     log.cache("CarbonLink creating a new socket for %s" % str(host))
     connection = socket.socket()
     connection.settimeout(self.timeout)
-    connection.connect( (server, port) )
-    connection.setsockopt( socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1 )
-    return connection
+    try:
+      connection.connect( (server, port) )
+    except:
+      self.last_failure[host] = time.time()
+      raise
+    else:
+      connection.setsockopt( socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1 )
+      return connection
 
   def query(self, metric_path):
     host = self.select_host(metric_path)
     conn = self.get_connection(host)
-    self.send_request(conn, metric_path)
-    results = self.recv_response(conn)
-    log.cache("CarbonLink query for %s returned %d datapoints" % (metric_path, len(results)))
-    self.connections[host].add(conn)
-    return results
+    try:
+      self.send_request(conn, metric_path)
+      results = self.recv_response(conn)
+    except:
+      self.last_failure[host] = time.time()
+      raise
+    else:
+      log.cache("CarbonLink query for %s returned %d datapoints" % (metric_path, len(results)))
+      self.connections[host].add(conn)
+      return results
 
   def send_request(self, conn, metric_path):
     len_prefix = struct.pack("!L", len(metric_path))

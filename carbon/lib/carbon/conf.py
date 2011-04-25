@@ -40,6 +40,7 @@ defaults = dict(
   RELAY_METHOD='rules',
   AUTOFLUSH=False,
   CH_HOST_LIST=[],
+  REPLICATION_FACTOR=1,
 )
 
 
