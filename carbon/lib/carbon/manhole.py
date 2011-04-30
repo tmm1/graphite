@@ -5,6 +5,7 @@ from twisted.conch.manhole import Manhole
 from twisted.conch.manhole_ssh import TerminalRealm, ConchFactory
 from twisted.internet import reactor
 from carbon.conf import settings
+from carbon.log import err
 
 
 namespace = {}
@@ -32,7 +33,11 @@ def start():
   userKeys = {
     settings.MANHOLE_USER : settings.MANHOLE_PUBLIC_KEY,
   }
-  credChecker = PublicKeyChecker(userKeys)
+  try:
+    credChecker = PublicKeyChecker(userKeys)
+  except:
+    err("failed to load MANHOLE_PUBLIC_KEY")
+    return
 
   sshPortal = portal.Portal(sshRealm)
   sshPortal.registerChecker(credChecker)
