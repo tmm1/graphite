@@ -22,6 +22,13 @@ except ImportError:
   gzip = False
 
 
+class FetchInProgress(object):
+  def __init__(self, wait_callback):
+    self.wait_callback = wait_callback
+
+  def waitForResults(self):
+    return self.wait_callback()
+
 
 class MultiReader(object):
   __slots__ = ('nodes',)
@@ -35,8 +42,23 @@ class MultiReader(object):
       interval_sets.extend( node.intervals.intervals )
     return IntervalSet(interval_sets)
 
-  def fetch(self, startTime, endTime): #TODO allow for parallelism in RemoteReader.fetch() calls (threads?)
+  def fetch(self, startTime, endTime):
+    # Start the fetch on each node
     results = [ n.fetch(startTime, endTime) for n in self.nodes ]
+
+    # Wait for any asynchronous operations to complete
+    for i, result in enumerate(results):
+      if isinstance(result, FetchInProgress):
+        try:
+          results[i] = result.waitForResults()
+        except:
+          log.exception("Failed to complete subfetch")
+          results[i] = None
+
+    results = [r for r in results if r is not None]
+    if not results:
+      raise Exception("All sub-fetches failed")
+
     return reduce(self.merge, results)
 
   def merge(self, results1, results2):

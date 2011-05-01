@@ -2,11 +2,12 @@ import socket
 import time
 import httplib
 from urllib import urlencode
-from threading import Lock
+from threading import Lock, Event
 from django.conf import settings
 from django.core.cache import cache
 from graphite.node import LeafNode, BranchNode
 from graphite.intervals import Interval, IntervalSet
+from graphite.readers import FetchInProgress
 from graphite.logger import log
 
 try:
@@ -126,8 +127,10 @@ class FindRequest(object):
 
 class RemoteReader(object):
   __slots__ = ('store', 'metric_path', 'intervals', 'query')
-  request_cache = {}
   cache_lock = Lock()
+  request_cache = {}
+  request_locks = {}
+  request_times = {}
 
   def __init__(self, store, node_info, bulk_query=None):
     self.store = store
@@ -153,57 +156,96 @@ class RemoteReader(object):
     ]
     query_string = urlencode(query_params)
     urlpath = '/render/?' + query_string
+    url = "http://%s%s" % (self.store.host, urlpath)
 
-    results = self.request_data(self.store, urlpath)
+    # Quick cache check up front
+    self.clean_cache()
+    cached_results = self.request_cache.get(url)
+    if cached_results:
+      for series in cached_results:
+        if series['name'] == self.metric_path:
+          time_info = (series['start'], series['end'], series['step'])
+          return (time_info, series['values'])
 
-    for series in results:
-      if series['name'] == self.metric_path:
-        time_info = (series['start'], series['end'], series['step'])
-        return (time_info, series['values'])
+    # Synchronize with other RemoteReaders using the same bulk query.
+    # Despite our use of thread synchronization primitives, the common
+    # case is for synchronizing asynchronous fetch operations within
+    # a single thread.
+    (request_lock, wait_lock, completion_event) = self.get_request_locks(url)
 
-  @classmethod
-  def request_data(cls, store, urlpath):
-    """This method allows multiple RemoteNodes (resulting from the same
-    FindRequest) to share a single /render/ call when fetching their data."""
+    if request_lock.acquire(False): # we only send the request the first time we're called
+      try:
+        log.info("RemoteReader.request_data :: requesting %s" % url)
+        connection = HTTPConnectionWithTimeout(self.store.host)
+        connection.timeout = settings.REMOTE_FETCH_TIMEOUT
+        connection.request('GET', urlpath)
+      except:
+        completion_event.set()
+        self.store.fail()
+        log.exception("Error requesting %s" % url)
+        raise
 
-    cls.cache_lock.acquire()
+    def wait_for_results():
+      if wait_lock.acquire(False): # the FetchInProgress that gets waited on waits for the actual completion
+        try:
+          response = connection.getresponse()
+          if response.status != 200:
+            raise Exception("Error response %d %s from %s" % (response.status, response.reason, url))
+
+          pickled_response = response.read()
+          results = pickle.loads(pickled_response)
+          self.cache_lock.acquire()
+          self.request_cache[url] = results
+          self.cache_lock.release()
+          completion_event.set()
+          return results
+        except:
+          completion_event.set()
+          self.store.fail()
+          log.exception("Error requesting %s" % url)
+          raise
+
+      else: # otherwise we just wait on the completion_event
+        completion_event.wait(settings.REMOTE_FETCH_TIMEOUT)
+        cached_results = self.request_cache.get(url)
+        if cached_results is None:
+          raise Exception("Passive remote fetch failed to find cached results")
+        else:
+          return cached_results
+
+    def extract_my_results():
+      for series in wait_for_results():
+        if series['name'] == self.metric_path:
+          time_info = (series['start'], series['end'], series['step'])
+          return (time_info, series['values'])
+
+    return FetchInProgress(extract_my_results)
+
+  def clean_cache(self):
+    self.cache_lock.acquire()
     try:
-      url = "http://%s%s" % (store.host, urlpath)
-      cached_results = cls.request_cache.get(url)
-
-      if cached_results is not None:
-        log.info("RemoteReader.request_cache hit  [%s]" % url)
-        return cached_results
-
-      log.info("RemoteReader.request_cache miss [%s]" % url)
-      if len(cls.request_cache) >= settings.REMOTE_READER_CACHE_SIZE_LIMIT:
-        log.info("RemoteReader.request_data :: clearing request_cache")
-        cls.request_cache.clear()
-
+      if len(self.request_locks) >= settings.REMOTE_READER_CACHE_SIZE_LIMIT:
+        log.info("RemoteReader.request_data :: clearing old from request_cache and request_locks")
+        now = time.time()
+        for url, timestamp in self.request_times.items():
+          age = now - timestamp
+          if age >= (2 * settings.REMOTE_FETCH_TIMEOUT):
+            del self.request_locks[url]
+            del self.request_times[url]
+            if url in self.request_cache:
+              del self.request_cache[url]
     finally:
-      cls.cache_lock.release()
+      self.cache_lock.release()
 
-    log.info("RemoteReader.request_data :: requesting %s" % url)
-    connection = HTTPConnectionWithTimeout(store.host)
-    connection.timeout = settings.REMOTE_FETCH_TIMEOUT
-
+  def get_request_locks(self, url):
+    self.cache_lock.acquire()
     try:
-      connection.request('GET', urlpath)
-      response = connection.getresponse()
-      if response.status != 200:
-        raise Exception("Error response %d %s from %s" % (response.status, response.reason, url))
-
-      pickled_response = response.read()
-      results = pickle.loads(pickled_response)
-      cls.cache_lock.acquire()
-      cls.request_cache[url] = results
-      cls.cache_lock.release()
-      return results
-
-    except:
-      log.exception("Error requesting %s" % url)
-      store.fail()
-      raise
+      if url not in self.request_locks:
+        self.request_locks[url] = (Lock(), Lock(), Event())
+        self.request_times[url] = time.time()
+      return self.request_locks[url]
+    finally:
+      self.cache_lock.release()
 
 
 # This is a hack to put a timeout in the connect() of an HTTP request.
