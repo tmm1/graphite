@@ -15,6 +15,7 @@ limitations under the License."""
 import time
 from graphite.logger import log
 from graphite.storage import STORE
+from graphite.readers import FetchInProgress
 
 
 class TimeSeries(list):
