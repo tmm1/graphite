@@ -19,6 +19,10 @@ class CarbonLinkPool:
     self.hosts = [ (server, instance) for (server, port, instance) in hosts ]
     self.ports = dict( ((server, instance), port) for (server, port, instance) in hosts )
     self.timeout = float(timeout)
+    servers = set([server for (server, port, instance) in hosts])
+    if len(servers) < settings.REPLICATION_FACTOR:
+      raise Exception("REPLICATION_FACTOR=%d cannot exceed servers=%d" % (settings.REPLICATION_FACTOR, len(servers)))
+
     self.hash_ring = ConsistentHashRing(self.hosts)
     self.connections = {}
     self.last_failure = {}
@@ -28,7 +32,17 @@ class CarbonLinkPool:
 
   def select_host(self, metric):
     "Returns the carbon host that has data for the given metric"
-    nodes = self.hash_ring.get_nodes(metric)[:settings.REPLICATION_FACTOR]
+    nodes = []
+    servers = set()
+    for node in self.hash_ring.get_nodes(metric):
+      (server, instance) = node
+      if server in servers:
+        continue
+      servers.add(server)
+      nodes.append(node)
+      if len(servers) >= settings.REPLICATION_FACTOR:
+        break
+
     available = [ n for n in nodes if self.is_available(n) ]
     return random.choice(available or nodes)
 

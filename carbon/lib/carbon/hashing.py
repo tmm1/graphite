@@ -62,18 +62,27 @@ class ConsistentHashRing:
 
 def setDestinationHosts(hosts):
   global serverRing
+  servers = set()
   for (server, port, instance) in hosts:
+    servers.add(server)
     ports[ (server, instance) ] = port
+
+  if len(servers) < settings.REPLICATION_FACTOR:
+    raise Exception("REPLICATION_FACTOR=%d cannot exceed servers=%d" % (settings.REPLICATION_FACTOR, len(servers)))
 
   serverRing = ConsistentHashRing(ports)
 
 
 def getDestinations(metric):
   count = 0
+  used = set()
   for host in serverRing.get_nodes(metric):
-    port = ports[host]
     (server, instance) = host
+    if server in used:
+      continue
+    port = ports[host]
     yield (server, port)
+    used.add(server)
     count += 1
     if count >= settings.REPLICATION_FACTOR:
       return
