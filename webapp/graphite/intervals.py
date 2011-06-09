@@ -6,7 +6,7 @@ class IntervalSet:
   __slots__ = ('intervals', 'size')
 
   def __init__(self, intervals, disjoint=False):
-    self.intervals = sorted(intervals)
+    self.intervals = intervals
 
     if not disjoint:
       self.intervals = union_overlapping(self.intervals)
@@ -26,28 +26,29 @@ class IntervalSet:
     return self.intersect( other.complement() )
 
   def complement(self):
-    complementary = set()
+    complementary = []
     cursor = NEGATIVE_INFINITY
 
     for interval in self.intervals:
       if cursor < interval.start:
-        complementary.add( Interval(cursor, interval.start) )
+        complementary.append( Interval(cursor, interval.start) )
         cursor = interval.end
 
     if cursor < INFINITY:
-      complementary.add( Interval(cursor, INFINITY) )
+      complementary.append( Interval(cursor, INFINITY) )
 
     return IntervalSet(complementary, disjoint=True)
 
   def intersect(self, other): #XXX The last major bottleneck. Factorial-time hell.
+    # Then again, this function is entirely unused...
     if (not self) or (not other):
       return IntervalSet([])
 
-    earliest = max(self.intervals[0].start, other.intervals[0].start)
-    latest = min(self.intervals[-1].end, other.intervals[-1].end)
+    #earliest = max(self.intervals[0].start, other.intervals[0].start)
+    #latest = min(self.intervals[-1].end, other.intervals[-1].end)
 
-    mine = [i for i in self.intervals if i.start >= earliest and i.end <= latest]
-    theirs = [i for i in other.intervals if i.start >= earliest and i.end <= latest]
+    #mine = [i for i in self.intervals if i.start >= earliest and i.end <= latest]
+    #theirs = [i for i in other.intervals if i.start >= earliest and i.end <= latest]
 
     intersections = [x for x in (i.intersect(j)
                                  for i in self.intervals
@@ -63,7 +64,7 @@ class IntervalSet:
     return IntervalSet(intersections, disjoint=True)
 
   def union(self, other):
-    return IntervalSet(self.intervals + other.intervals)
+    return IntervalSet( sorted(self.intervals + other.intervals) )
 
 
 

@@ -92,9 +92,10 @@ class Store:
           covered_intervals = covered_intervals.union(node.intervals)
 
       while nodes_remaining:
-        best_node = max(nodes_remaining, key=measure_of_added_coverage)
+        node_coverages = [ (measure_of_added_coverage(n), n) for n in nodes_remaining ]
+        best_coverage, best_node = max(node_coverages)
 
-        if measure_of_added_coverage(best_node) == 0:
+        if best_coverage == 0:
           break
 
         nodes_remaining.remove(best_node)
@@ -113,7 +114,9 @@ class Store:
         if distance_to_requested_interval(best_candidate) <= settings.FIND_TOLERANCE:
           minimal_node_set.add(best_candidate)
 
-      if minimal_node_set:
+      if len(minimal_node_set) == 1:
+        yield minimal_node_set.pop()
+      elif len(minimal_node_set) > 1:
         reader = MultiReader(minimal_node_set)
         yield LeafNode(path, reader)
 

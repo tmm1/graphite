@@ -40,7 +40,7 @@ class MultiReader(object):
     interval_sets = []
     for node in self.nodes:
       interval_sets.extend( node.intervals.intervals )
-    return IntervalSet(interval_sets)
+    return IntervalSet( sorted(interval_sets) )
 
   def fetch(self, startTime, endTime):
     # Start the fetch on each node
