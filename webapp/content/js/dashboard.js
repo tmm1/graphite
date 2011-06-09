@@ -80,7 +80,6 @@ var graphStore = new Ext.data.ArrayStore({
   fields: GraphRecord
 });
 
-
 var originalDefaultGraphParams = {
   from: '-2hours',
   until: 'now',
@@ -175,7 +174,7 @@ function initDashboard () {
     function addAll () {
       Ext.each(node.childNodes, function (child) {
         if (child.leaf) {
-          graphAreaToggle(child.id, true);
+          graphAreaToggle(child.id, {dontRemove: true});
         } else if (recurse) {
           expandNode(child, recurse);
         }
@@ -235,6 +234,116 @@ function initDashboard () {
     '<div class="x-clear"></div>'
   );
 
+  function setupGraphDD () {
+    graphView.dragZone = new Ext.dd.DragZone(graphView.getEl(), {
+      containerScroll: true,
+      ddGroup: 'graphs',
+
+      getDragData: function (e) {
+        var sourceEl = e.getTarget(graphView.itemSelector, 10);
+        if (sourceEl) {
+          var dupe = sourceEl.cloneNode(true);
+          dupe.id = Ext.id();
+          return {
+            ddel: dupe,
+            sourceEl: sourceEl,
+            repairXY: Ext.fly(sourceEl).getXY(),
+            sourceStore: graphStore,
+            draggedRecord: graphView.getRecord(sourceEl)
+          }
+        }
+      },
+
+      getRepairXY: function () {
+        return this.dragData.repairXY;
+      }
+
+    });
+
+    graphView.dropZone = new Ext.dd.DropZone(graphView.getEl(), {
+      ddGroup: 'graphs',
+      dropAction: 'reorder',
+      mergeEl: Ext.get('merge'),
+
+      getTargetFromEvent: function (e) {
+        return e.getTarget(graphView.itemSelector);
+      },
+
+      onNodeEnter: function (target, dd, e, data) {
+        //Ext.fly(target).addClass('graph-highlight');
+        this.setDropAction('reorder');
+        this.mergeTarget = Ext.get(target);
+        this.mergeSwitchTimeout = this.setDropAction.defer(UI_CONFIG.merge_hover_delay, this, ['merge']);
+      },
+
+      onNodeOut: function (target, dd, e, data) {
+        //Ext.fly(target).removeClass('graph-highlight');
+        this.mergeEl.hide();
+        //this.setDropAction('reorder');
+      },
+
+      onNodeOver: function (target, dd, e, data) {
+        return Ext.dd.DropZone.prototype.dropAllowed;
+      },
+
+      setDropAction: function (action) {
+        if (this.mergeSwitchTimeout != null) {
+          clearTimeout(this.mergeSwitchTimeout);
+          this.mergeSwitchTimeout = null;
+        }
+
+        this.dropAction = action;
+        if (action == 'reorder') {
+          //revert merge ui change
+          this.mergeEl.hide();
+        } else if (action == 'merge') {
+          //apply merge ui change
+          this.mergeEl.show();
+          var targetXY = this.mergeTarget.getXY();
+          var mergeElWidth = Math.max(GraphSize.width * 0.75, 20);
+          var xOffset = (GraphSize.width - mergeElWidth) / 2;
+          var yOffset = -14;
+          this.mergeEl.setXY([targetXY[0] + xOffset, targetXY[1] + yOffset]);
+          this.mergeEl.setWidth(mergeElWidth);
+        }
+      },
+
+      onNodeDrop: function (target, dd, e, data){ 
+        var nodes = graphView.getNodes();
+        var dropIndex = nodes.indexOf(target);
+        var dragIndex = graphStore.indexOf(data.draggedRecord);
+
+        if (dragIndex == dropIndex) {
+          return false;
+        }
+
+        if (this.dropAction == 'reorder') {
+          graphStore.removeAt(dragIndex);
+          graphStore.insert(dropIndex, data.draggedRecord);
+          updateGraphRecords();
+          return true;
+        } else if (this.dropAction == 'merge') {
+          var dragRecord = data.draggedRecord;
+          var dropRecord = graphView.getRecord(target);
+          if (dropRecord.data.params.target.length == 1) {
+            if (dropRecord.data.params.target[0] == dropRecord.data.params.title) {
+              delete dropRecord.data.params.title;
+            }
+          }
+
+          var mergedTargets = uniq( dragRecord.data.params.target.concat(dropRecord.data.params.target) );
+          dropRecord.data.params.target = mergedTargets;
+          dropRecord.data.target = Ext.urlEncode({target: mergedTargets});
+          dropRecord.commit();
+          graphStore.remove(dragRecord);
+          updateGraphRecords();
+          return true;
+        }
+        return false;
+      }
+    });
+  }
+
   graphView = new Ext.DataView({
     store: graphStore,
     tpl: graphTemplate,
@@ -242,7 +351,16 @@ function initDashboard () {
     itemSelector: 'div.graph-container',
     emptyText: "Configure your context above, and then select some metrics.",
     autoScroll: true,
-    listeners: {click: graphClicked}
+//    plugins: [
+//      new Ext.ux.DataViewTransition({
+//        duration: 750,
+//        idProperty: 'target'
+//      })
+//    ],
+    listeners: {
+      click: graphClicked,
+      render: setupGraphDD
+    }
   });
 
   /* Toolbar items */
@@ -354,9 +472,9 @@ function initDashboard () {
     tooltip: "Toggle auto-refresh",
     toggleHandler: function (button, pressed) {
                      if (pressed) {
-                       Ext.TaskMgr.start(refreshTask);
+                       startTask(refreshTask);
                      } else {
-                       Ext.TaskMgr.stop(refreshTask);
+                       stopTask(refreshTask);
                      }
                    }
   };
@@ -443,11 +561,9 @@ function initDashboard () {
   });
 
   refreshTask = {
-    enabled: false,
     run: refreshGraphs,
     interval: UI_CONFIG.refresh_interval * 1000
   };
-  //Ext.TaskMgr.start(refreshTask);
 
   // Load initial dashboard state if it was passed in
   if (initialState) {
@@ -603,43 +719,66 @@ function metricSelectorNodeClicked (node, e) {
 }
 
 
-function graphAreaToggle(target, dontRemove) {
-  var existingIndex = graphStore.find('target', target);
+function graphAreaToggle(target, options) {
+  /* The GraphRecord's id is their URL-encoded target=...&target=... string
+     This function can get called with either the encoded string or just a raw
+     metric path, eg. "foo.bar.baz".
+  */
+  var graphTargetString;
+  if (target.substr(0,7) == "target=") {
+    graphTargetString = target;
+  } else {
+    graphTargetString = "target=" + target;
+  }
+  var graphTargetList = Ext.urlDecode(graphTargetString)['target'];
+  if (typeof graphTargetList == 'string') {
+    graphTargetList = [graphTargetList];
+  }
+
+  var existingIndex = graphStore.find('target', graphTargetString);
 
   if (existingIndex > -1) {
-    if (!dontRemove) {
+    if ( (options === undefined) || (!options.dontRemove) ) {
       graphStore.removeAt(existingIndex);
     }
   } else {
     // Add it
     var myParams = {
-      target: [target],
-      title: target
+      target: graphTargetList
     };
     var urlParams = {};
     Ext.apply(urlParams, defaultGraphParams);
+    if (options && options.defaultParams) {
+      Ext.apply(urlParams, options.defaultParams);
+    }
     Ext.apply(urlParams, GraphSize);
     Ext.apply(urlParams, myParams);
 
     var record = new GraphRecord({
-      target: target,
+      target: graphTargetString,
       params: myParams,
       url: '/render?' + Ext.urlEncode(urlParams)
     });
     graphStore.add([record]);
   }
-
 }
 
-function refreshGraphs() {
+function updateGraphRecords() {
   graphStore.each(function () {
     var params = {};
     Ext.apply(params, defaultGraphParams);
     Ext.apply(params, this.data.params);
     Ext.apply(params, GraphSize);
     params.uniq = Math.random();
+    if (params.title === undefined && params.target.length == 1) {
+      params.title = params.target[0];
+    }
     this.set('url', '/render?' + Ext.urlEncode(params));
   });
+}
+
+function refreshGraphs() {
+  updateGraphRecords();
   graphView.refresh();
   graphArea.getTopToolbar().get('last-refreshed-text').setText( (new Date()).format('g:i:s A') );
 }
@@ -672,14 +811,28 @@ function updateAutoRefresh (newValue) {
   }
 
   if (Ext.getCmp('auto-refresh-button').pressed) {
-    Ext.TaskMgr.stop(refreshTask);
+    stopTask(refreshTask);
     refreshTask.interval = value * 1000;
-    Ext.TaskMgr.start(refreshTask);
+    startTask(refreshTask);
   } else {
     refreshTask.interval = value * 1000;
   }
 }
 
+/* Task management */
+function stopTask(task) {
+  if (task.running) {
+    Ext.TaskMgr.stop(task);
+    task.running = false;
+  }
+}
+
+function startTask(task) {
+  if (!task.running) {
+    Ext.TaskMgr.start(task);
+    task.running = true;
+  }
+}
 
 /* Time Range management */
 var TimeRange = {
@@ -993,7 +1146,19 @@ function doShare() {
                 }
     });
   } else {
-    showShareWindow();
+    // Prompt the user to save their dashboard so they are aware only saved changes get shared
+    Ext.Msg.show({
+      title: "Save Dashboard And Share",
+      msg: "You must save changes to your dashboard in order to share it.",
+      buttons: Ext.Msg.OKCANCEL,
+      fn: function (button) {
+            if (button == 'ok') {
+              sendSaveRequest(dashboardName);
+              showShareWindow();
+            }
+          }
+    });
+
   }
 }
 
@@ -1030,9 +1195,11 @@ function showShareWindow() {
 }
 
 /* Other stuff */
-var targetListing;
+var targetGrid;
+var activeMenu;
 
 function graphClicked(graphView, graphIndex, element, evt) {
+  Ext.get('merge').hide();
   var record = graphStore.getAt(graphIndex);
   if (!record) {
     return;
@@ -1042,6 +1209,14 @@ function graphClicked(graphView, graphIndex, element, evt) {
     justClosedGraph = false;
     return;
   }
+
+  if ( (activeMenu != null) && (selectedRecord == record) ) {
+    activeMenu.destroy();
+    activeMenu = null;
+    return;
+  }
+
+  selectedRecord = record; // global state hack for graph options API
 
   var menu;
   var menuItems = [];
@@ -1056,7 +1231,6 @@ function graphClicked(graphView, graphIndex, element, evt) {
       if ((!field.getXType) || field.getXType() != 'textfield') {
         return;
       }
-
       if (field.initialConfig.isTargetField) {
         targets.push( field.getValue() );
       } else {
@@ -1072,59 +1246,171 @@ function graphClicked(graphView, graphIndex, element, evt) {
     menu.destroy();
   }
 
-  Ext.each(record.data.params.target, function (target, targetIndex) {
-    var item = new Ext.form.TextField({
-      isTargetField: true, // total hack
-      fieldLabel: "Target",
-      allowBlank: false,
-      grow: true,
-      growMin: 150,
-      value: target,
-      disableKeyFilter: true,
-      listeners: {
-        specialkey: applyChanges
-      }
-    });
-    menuItems.push(item);
-  });
-
-  var editParams = Ext.apply({}, record.data.params);
-  removeUneditable(editParams);
-  menuItems.push(new Ext.form.TextField({
-    fieldLabel: "Params",
-    allowBlank: true,
-    grow: true,
-    growMin: 150,
-    value: Ext.urlEncode(editParams),
-    disableKeyFilter: true,
+  /* Inline store definition hackery*/
+  var functionsButton;
+  var targets = record.data.params.target;
+  targets = map(targets, function (t) { return {target: t}; });
+  var targetStore = new Ext.data.JsonStore({
+    fields: ['target'],
+    data: targets,
     listeners: {
-      specialkey: applyChanges
+      update: function (thisStore, record, operation) {
+        var targets = [];
+        thisStore.each(function (rec) { targets.push(rec.data.target); });
+        selectedRecord.data.params.target = targets;
+        selectedRecord.data.target = Ext.urlEncode({target: targets});
+        refreshGraphs();
+      }
     }
-  }));
+  });
 
-  menuItems.push({
+  var buttonWidth = 150;
+  var rowHeight = 21;
+  var maxRows = 6;
+  var frameHeight = 5;
+  var gridWidth = (buttonWidth * 3) + 2;
+  var gridHeight = (rowHeight * Math.min(targets.length, maxRows)) + frameHeight;
+
+  targetGrid = new Ext.grid.EditorGridPanel({
+    //frame: true,
+    width: gridWidth,
+    height: gridHeight,
+    store: targetStore,
+    hideHeaders: true,
+    viewConfig: {markDirty: false},
+    colModel: new Ext.grid.ColumnModel({
+      columns: [
+        {
+          id: 'target',
+          header: 'Target',
+          dataIndex: 'target',
+          width: gridWidth - 22,
+          editor: {xtype: 'textfield'}
+        }
+      ]
+    }),
+    selModel: new Ext.grid.RowSelectionModel({
+      singleSelect: false,
+      listeners: {
+        selectionchange: function (thisSelModel) {
+          functionsButton.setDisabled(thisSelModel.getCount() == 0);
+        }
+      }
+    }),
+    clicksToEdit: 2,
+    listeners: {
+      afterrender: function (thisGrid) {
+        thisGrid.getSelectionModel().selectFirstRow.defer(50, thisGrid.getSelectionModel());
+      }
+    }
+  });
+  menuItems.push(targetGrid);
+
+  /* Setup our menus */
+  var functionsMenu = new Ext.menu.Menu({
+    allowOtherMenus: true,
+    items: createFunctionsMenu().concat([ {text: 'Remove Outer Call', handler: removeOuterCall} ])
+  });
+
+  functionsButton = new Ext.Button({
+    text: 'Apply Function',
+    disabled: true,
+    width: buttonWidth,
+    handler: function (thisButton) {
+               if (functionsMenu.isVisible()) {
+                 functionsMenu.hide();
+               } else {
+                 operationsMenu.hide();
+                 optionsMenu.doHide(); // private method... yuck
+                 functionsMenu.show(thisButton.getEl());
+               }
+             }
+  });
+
+
+  var optionsMenuConfig = createOptionsMenu(); // defined in composer_widgets.js
+  optionsMenuConfig.allowOtherMenus = true;
+  var optionsMenu = new Ext.menu.Menu(optionsMenuConfig);
+  optionsMenu.on('hide', function () { menu.hide(); });
+  updateCheckItems();
+
+  var operationsMenu = new Ext.menu.Menu({
+    allowOtherMenus: true,
+    items: [{
+      xtype: 'button',
+      fieldLabel: "<span style='visibility: hidden'>",
+      text: 'Breakout',
+      width: 100,
+      handler: function () { menu.destroy(); breakoutGraph(record); }
+    }, {
+      xtype: 'button',
+      fieldLabel: "<span style='visibility: hidden'>",
+      text: 'Clone',
+      width: 100,
+      handler: function () { menu.destroy(); cloneGraph(record); }
+    }]
+  });
+
+  var buttons = [functionsButton];
+
+  buttons.push({
     xtype: 'button',
-    fieldLabel: "<span style='visibility: hidden'>",
-    text: 'Breakout Into Separate Graphs',
-    handler: function () { menu.destroy(); breakoutGraph(record); }
+    text: "Render Options",
+    width: buttonWidth,
+    handler: function (thisButton) {
+               if (optionsMenu.isVisible()) {
+                 optionsMenu.doHide(); // private method... yuck (no other way to hide w/out trigging hide event handler)
+               } else {
+                 operationsMenu.hide();
+                 functionsMenu.hide();
+                 optionsMenu.show(thisButton.getEl());
+               }
+             }
+  });
+
+  buttons.push({
+    xtype: 'button',
+    text: "Graph Operations",
+    width: buttonWidth,
+    handler: function (thisButton) {
+               if (operationsMenu.isVisible()) {
+                 operationsMenu.hide();
+               } else {
+                 optionsMenu.doHide(); // private method... yuck
+                 functionsMenu.hide();
+                 operationsMenu.show(thisButton.getEl());
+               }
+             }
   });
 
   menuItems.push({
-    xtype: 'button',
-    fieldLabel: "<span style='visibility: hidden'>",
-    text: 'Clone Graph',
-    handler: function () { menu.destroy(); cloneGraph(record); }
+    xtype: 'panel',
+    layout: 'hbox',
+    items: buttons
   });
 
   menu = new Ext.menu.Menu({
-    layout: 'form',
-    labelWidth: 72,
-    labelAlign: 'right',
+    layout: 'anchor',
+    allowOtherMenus: true,
     items: menuItems
   });
+  activeMenu = menu;
   menu.showAt( evt.getXY() );
   menu.get(0).focus(false, 50);
   menu.keyNav.disable();
+  menu.on('hide', function () {
+                    var graphMenuParams = Ext.getCmp('graphMenuParams');
+                    if (graphMenuParams) {
+                      graphMenuParams.destroy();
+                    }
+                  }
+  );
+  menu.on('destroy', function () {
+                       optionsMenu.destroy();
+                       operationsMenu.destroy();
+                       functionsMenu.destroy();
+                     }
+  );
 }
 
 
@@ -1156,7 +1442,7 @@ function breakoutGraph(record) {
                 var responseObj = Ext.decode(response.responseText);
                 graphStore.remove(record);
                 Ext.each(responseObj.results, function (metricPath) {
-                  graphAreaToggle(metricPath, true);
+                  graphAreaToggle(metricPath, {dontRemove: true, defaultParams: record.data.params});
                 });
               }
   });
@@ -1174,7 +1460,7 @@ function cloneGraphRecord(record) {
   //ensure we are working with copies, not references
   var props = {
     url: record.data.url,
-    target: Ext.urlEncode({ target: record.data.params.target }),
+    target: record.data.target,
     params: Ext.apply({}, record.data.params)
   };
   props.params.target = Ext.urlDecode(props.target).target;
@@ -1340,7 +1626,7 @@ function getState() {
 function applyState(state) {
   setDashboardName(state.name);
 
-  //state.timeConfig = {type, relativeConfig={, absoluteConfig}
+  //state.timeConfig = {type, quantity, units, startDate, startTime, endDate, endTime}
   var timeConfig = state.timeConfig
   TimeRange.type = timeConfig.type;
   TimeRange.quantity = timeConfig.quantity;
@@ -1354,11 +1640,11 @@ function applyState(state) {
   //state.refreshConfig = {enabled, interval}
   var refreshConfig = state.refreshConfig;
   if (refreshConfig.enabled) {
-    Ext.TaskMgr.stop(refreshTask);
-    Ext.TaskMgr.start(refreshTask);
+    stopTask(refreshTask);
+    startTask(refreshTask);
     Ext.getCmp('auto-refresh-button').toggle(true);
   } else {
-    Ext.TaskMgr.stop(refreshTask);
+    stopTask(refreshTask);
     Ext.getCmp('auto-refresh-button').toggle(false);
   }
   //refreshTask.interval = refreshConfig.interval;
@@ -1633,11 +1919,194 @@ function showDashboardFinder() {
   win.show();
 }
 
+/* Graph Options API (to reuse createOptionsMenu from composer_widgets.js) */
+function updateGraph() {
+  refreshGraphs();
+  var graphMenuParams = Ext.getCmp('graphMenuParams');
+  if (graphMenuParams) {
+    var editParams = Ext.apply({}, selectedRecord.data.params);
+    removeUneditable(editParams);
+    graphMenuParams.setValue( Ext.urlEncode(editParams) );
+  }
+}
+
+function getParam(param) {
+  return selectedRecord.data.params[param];
+}
+
+function setParam(param, value) {
+  selectedRecord.data.params[param] = value;
+  selectedRecord.commit();
+}
+
+function removeParam(param) {
+  delete selectedRecord.data.params[param];
+  selectedRecord.commit();
+}
+
+
+/* Target Functions API (super-ghetto) */
+function addTargetToSelectedGraph(target) {
+  selectedRecord.data.params.target.push(target);
+  selectedRecord.data.target = Ext.urlEncode({target: selectedRecord.data.params.target});
+}
+
+function removeTargetFromSelectedGraph(target) {
+  selectedRecord.data.params.target.remove(target);
+  selectedRecord.data.target = Ext.urlEncode({target: selectedRecord.data.params.target});
+}
+
+function getSelectedTargets() {
+  if (targetGrid) {
+    return map(targetGrid.getSelectionModel().getSelections(), function (r) {
+      return r.data.target;
+    });
+  }
+  return [];
+}
+
+function applyFuncToEach(funcName, extraArg) {
+
+  function applyFunc() {
+    Ext.each(targetGrid.getSelectionModel().getSelections(),
+      function (record) {
+        var target = record.data.target;
+        var newTarget;
+        var targetStore = targetGrid.getStore();
+
+        targetStore.remove(record);
+        removeTargetFromSelectedGraph(target);
+
+        if (extraArg) {
+          if (funcName == 'mostDeviant') { //SPECIAL CASE HACK
+            newTarget = funcName + '(' + extraArg + ',' + target + ')';
+          } else {
+            newTarget = funcName + '(' + target + ',' + extraArg + ')';
+          }
+        } else {
+          newTarget = funcName + '(' + target + ')';
+        }
+
+        // Add newTarget to selectedRecord
+        targetStore.add([ new targetStore.recordType({target: newTarget}, newTarget) ]);
+        addTargetToSelectedGraph(newTarget);
+        targetGrid.getSelectionModel().selectRow(targetStore.findExact('target', newTarget), true);
+      }
+    );
+    refreshGraphs();
+  }
+  return applyFunc;
+}
+
+function applyFuncToEachWithInput (funcName, question, options) {
+  if (options == null) {
+    options = {};
+  }
+
+ function applyFunc() {
+    Ext.MessageBox.prompt(
+      "Input Required", //title
+      question, //message
+      function (button, inputValue) { //handler
+        if (button == 'ok' && (options.allowBlank || inputValue != '')) {
+          if (options.quote) {
+            inputValue = '"' + inputValue + '"';
+          }
+          applyFuncToEach(funcName, inputValue)();
+        }
+      },
+      this, //scope
+      false, //multiline
+      "" //initial value
+    );
+  }
+  applyFunc = applyFunc.createDelegate(this);
+  return applyFunc;
+}
+
+function applyFuncToAll (funcName) {
+  function applyFunc() {
+    var args = getSelectedTargets().join(',');
+    var newTarget = funcName + '(' + args + ')';
+    var targetStore = targetGrid.getStore();
+
+    Ext.each(targetGrid.getSelectionModel().getSelections(),
+      function (record) {
+        targetStore.remove(record);
+        removeTargetFromSelectedGraph(record.data.target);
+      }
+    );
+    targetStore.add([ new targetStore.recordType({target: newTarget}, newTarget) ]);
+    addTargetToSelectedGraph(newTarget);
+    targetGrid.getSelectionModel().selectRow(targetStore.findExact('target', newTarget), true);
+    refreshGraphs();
+  }
+  applyFunc = applyFunc.createDelegate(this);
+  return applyFunc;
+}
+
+function removeOuterCall() { // blatantly repurposed from composer_widgets.js (don't hate)
+  Ext.each(targetGrid.getSelectionModel().getSelections(), function (record) {
+    var target = record.data.target;
+    var targetStore = targetGrid.getStore();
+    var args = [];
+    var i, c;
+    var lastArg = 0;
+    var depth = 0;
+    var argString = target.replace(/^[^(]+\((.+)\)/, "$1"); //First we strip it down to just args
+
+    for (i = 0; i < argString.length; i++) {
+      switch (argString.charAt(i)) {
+        case '(': depth += 1; break;
+        case ')': depth -= 1; break;
+        case ',':
+          if (depth > 0) { continue; }
+          if (depth < 0) { Ext.Msg.alert("Malformed target, cannot remove outer call."); return; }
+          args.push( argString.substring(lastArg, i).replace(/^\s+/, '').replace(/\s+$/, '') );
+          lastArg = i + 1;
+          break;
+      }
+    }
+    args.push( argString.substring(lastArg, i) );
+
+    targetStore.remove(record);
+    selectedRecord.data.params.target.remove(target);
+
+    Ext.each(args, function (arg) {
+      if (!arg.match(/^([0123456789\.]+|".+")$/)) { //Skip string and number literals
+        targetStore.add([ new targetStore.recordType({target: arg}) ]);
+        selectedRecord.data.params.target.push(arg);
+        targetGrid.getSelectionModel().selectRow(targetStore.findExact('target', arg), true);
+      }
+    });
+  });
+  refreshGraphs();
+}
+
 /* Cookie stuff */
 function getContextFieldCookie(field) {
   return cookieProvider.get(field);
 }
 
 function setContextFieldCookie(field, value) {
-  cookieProvider.set(field, value)
+  cookieProvider.set(field, value);
+}
+
+/* Misc */
+function uniq(myArray) {
+  var uniqArray = [];
+  for (var i=0; i<myArray.length; i++) {
+    if (uniqArray.indexOf(myArray[i]) == -1) {
+      uniqArray.push(myArray[i]);
+    }
+  }
+  return uniqArray;
+}
+
+function map(myArray, myFunc) {
+  var results = [];
+  for (var i=0; i<myArray.length; i++) {
+    results.push( myFunc(myArray[i]) );
+  }
+  return results;
 }

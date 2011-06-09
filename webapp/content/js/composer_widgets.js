@@ -128,10 +128,6 @@ function fitImageToWindow(win) {
   }
 }
 
-function updateGraph() {
-  Composer.updateImage();
-}
-
 /* Toolbar stuff */
 function createToolbarButton(tip, icon, handler) {
   return new Ext.Toolbar.Button({
@@ -476,76 +472,7 @@ var GraphDataWindow = {
             defaults: {
               defaultAlign: 'tr-tl'
             },
-            items: [
-              {
-                text: 'Combine',
-                id: 'combineMenu',
-                menu: [
-                  {text: 'Sum', handler: this.applyFuncToAll('sumSeries')},
-                  {text: 'Average', handler: this.applyFuncToAll('averageSeries')},
-                  {text: 'Sum using wildcards', handler: this.applyFuncToEachWithInput('sumSeriesWithWildcards', 'Please enter a comma separated list of numbers specifying the locations in the name to place wildcards')},
-                  {text: 'Average using wildcards', handler: this.applyFuncToEachWithInput('averageSeriesWithWildcards', 'Please enter a comma separated list of numbers specifying the locations in the name to place wildcards')},
-                  {text: 'Min Values', handler: this.applyFuncToAll('minSeries')},
-                  {text: 'Max Values', handler: this.applyFuncToAll('maxSeries')},
-                  {text: 'Group', handler: this.applyFuncToAll('group')}
-                ]
-              }, {
-                text: 'Transform',
-                menu: [
-                  {text: 'Scale', handler: this.applyFuncToEachWithInput('scale', 'Please enter a scale factor')},
-                  {text: 'Offset', handler: this.applyFuncToEachWithInput('offset', 'Please enter the value to offset Y-values by')},
-                  {text: 'Derivative', handler: this.applyFuncToEach('derivative')},
-                  {text: 'Integral', handler: this.applyFuncToEach('integral')},
-                  {text: 'Non-negative Derivative', handler: this.applyFuncToEachWithInput('nonNegativeDerivative', "Please enter a maximum value if this metric is a wrapping counter (or just leave this blank)", {allowBlank: true})},
-                  {text: 'Log', handler: this.applyFuncToEachWithInput('log', 'Please enter a base')},
-                  {text: 'timeShift', handler: this.applyFuncToEachWithInput('timeShift', 'Shift this metric ___ back in time (examples: 10min, 7d, 2w)', {quote: true})},
-                  {text: 'Summarize', handler: this.applyFuncToEachWithInput('summarize', 'Please enter a summary interval (examples: 10min, 1h, 7d)', {quote: true})},
-                  {text: 'Hit Count', handler: this.applyFuncToEachWithInput('hitcount', 'Please enter a summary interval (examples: 10min, 1h, 7d)', {quote: true})}
-                ]
-              }, {
-                text: 'Calculate',
-                menu: [
-                  {text: 'Moving Average', handler: this.applyFuncToEachWithInput('movingAverage', 'Moving average for the last ___ data points')},
-                  {text: 'Moving Standard Deviation', handler: this.applyFuncToEachWithInput('stdev', 'Moving standard deviation for the last ___ data points')},
-                  {text: 'As Percent', handler: this.applyFuncToEachWithInput('asPercent', 'Please enter the value that corresponds to 100%')},
-                  {text: 'Difference (of 2 series)', handler: this.applyFuncToAll('diffSeries')},
-                  {text: 'Ratio (of 2 series)', handler: this.applyFuncToAll('divideSeries')}
-                ]
-              }, {
-                text: 'Filter',
-                menu: [
-                  {text: 'Most Deviant', handler: this.applyFuncToEachWithInput('mostDeviant', 'Draw the ___ metrics with the highest standard deviation')},
-                  {text: 'Highest Current Value', handler: this.applyFuncToEachWithInput('highestCurrent', 'Draw the ___ metrics with the highest current value')},
-                  {text: 'Lowest Current Value', handler: this.applyFuncToEachWithInput('lowestCurrent', 'Draw the ___ metrics with the lowest current value')},
-                  {text: 'Highest Maximum Value', handler: this.applyFuncToEachWithInput('highestMax', 'Draw the ___ metrics with the highest maximum value')},
-                  {text: 'Nth Percentile Value', handler: this.applyFuncToEachWithInput('nPercentile', 'Draw the ___th Percentile for each metric.')},
-                  {text: 'Current Value Above', handler: this.applyFuncToEachWithInput('currentAbove', 'Draw all metrics whose current value is above ___')},
-                  {text: 'Current Value Below', handler: this.applyFuncToEachWithInput('currentBelow', 'Draw all metrics whose current value is below ___')},
-                  {text: 'Highest Average Value', handler: this.applyFuncToEachWithInput('highestAverage', 'Draw the ___ metrics with the highest average value')},
-                  {text: 'Lowest Average Value', handler: this.applyFuncToEachWithInput('lowestAverage', 'Draw the ___ metrics with the lowest average value')},
-                  {text: 'Average Value Above', handler: this.applyFuncToEachWithInput('averageAbove', 'Draw all metrics whose average value is above ___')},
-                  {text: 'Average Value Below', handler: this.applyFuncToEachWithInput('averageBelow', 'Draw all metrics whose average value is below ___')},
-                  {text: 'Maximum Value Above', handler: this.applyFuncToEachWithInput('maximumAbove', 'Draw all metrics whose maximum value is above ___')},
-                  {text: 'Maximum Value Below', handler: this.applyFuncToEachWithInput('maximumBelow', 'Draw all metrics whose maximum value is below ___')},
-                  {text: 'sortByMaxima', handler: this.applyFuncToEach('sortByMaxima')},
-                  {text: 'sortByMinima', handler: this.applyFuncToEach('sortByMinima')},
-                  {text: 'limit', handler: this.applyFuncToEachWithInput('limit', 'Limit to first ___ of a list of metrics')},
-                  {text: 'Exclude', handler: this.applyFuncToEachWithInput('exclude', 'Exclude metrics that match a regular expression')}
-                ]
-              }, {
-                text: 'Special',
-                menu: [
-                  {text: 'Set Legend Name', handler: this.applyFuncToEachWithInput('alias', 'Enter a legend label for this graph target', {quote: true})},
-                  {text: 'Aggregate By Sum', handler: this.applyFuncToEach('cumulative')},
-                  {text: 'Draw non-zero As Infinite', handler: this.applyFuncToEach('drawAsInfinite')},
-                  {text: 'Line Width', handler: this.applyFuncToEachWithInput('lineWidth', 'Please enter a line width for this graph target')},
-                  {text: 'Dashed Line', handler: this.applyFuncToEach('dashed')},
-                  {text: 'Keep Last Value', handler: this.applyFuncToEach('keepLastValue')},
-                  {text: 'Substring', handler: this.applyFuncToEachWithInput('substr', 'Enter a starting position')},
-                  {text: 'Add Threshold Line', handler: this.applyFuncToEachWithInput('threshold', 'Enter a threshold value')}
-                ]
-              }
-            ]
+            items: createFunctionsMenu()
           }
         }, {
           text: 'Undo Function',
@@ -590,13 +517,11 @@ var GraphDataWindow = {
     if (selected == 0) {
       Ext.getCmp('editTargetButton').disable();
       Ext.getCmp('removeTargetButton').disable();
-      Ext.getCmp('combineMenu').disable();
       Ext.getCmp('applyFunctionButton').disable();
       Ext.getCmp('undoFunctionButton').disable();
     } else {
       Ext.getCmp('editTargetButton').enable();
       Ext.getCmp('removeTargetButton').enable();
-      Ext.getCmp('combineMenu').enable();
       Ext.getCmp('applyFunctionButton').enable();
       Ext.getCmp('undoFunctionButton').enable();
     }
@@ -668,7 +593,7 @@ var GraphDataWindow = {
             if (options.quote) {
               inputValue = '"' + inputValue + '"';
             }
-            this.applyFuncToEach(funcName, inputValue)();
+            applyFuncToEach(funcName, inputValue)();
           }
         },
         this, //scope
@@ -941,6 +866,87 @@ var GraphDataWindow = {
   }
 };
 
+/* Yet another ghetto api hack */
+var applyFuncToAll = GraphDataWindow.applyFuncToAll.createDelegate(GraphDataWindow);
+var applyFuncToEach = GraphDataWindow.applyFuncToEach.createDelegate(GraphDataWindow);
+var applyFuncToEachWithInput = GraphDataWindow.applyFuncToEachWithInput.createDelegate(GraphDataWindow);
+
+
+function createFunctionsMenu() {
+  return [{
+      text: 'Combine',
+      menu: [
+        {text: 'Sum', handler: applyFuncToAll('sumSeries')},
+        {text: 'Average', handler: applyFuncToAll('averageSeries')},
+        {text: 'Sum using wildcards', handler: applyFuncToEachWithInput('sumSeriesWithWildcards', 'Please enter a comma separated list of numbers specifying the locations in the name to place wildcards')},
+        {text: 'Average using wildcards', handler: applyFuncToEachWithInput('averageSeriesWithWildcards', 'Please enter a comma separated list of numbers specifying the locations in the name to place wildcards')},
+        {text: 'Min Values', handler: applyFuncToAll('minSeries')},
+        {text: 'Max Values', handler: applyFuncToAll('maxSeries')},
+        {text: 'Group', handler: applyFuncToAll('group')}
+      ]
+    }, {
+      text: 'Transform',
+      menu: [
+        {text: 'Scale', handler: applyFuncToEachWithInput('scale', 'Please enter a scale factor')},
+        {text: 'Offset', handler: applyFuncToEachWithInput('offset', 'Please enter the value to offset Y-values by')},
+        {text: 'Derivative', handler: applyFuncToEach('derivative')},
+        {text: 'Integral', handler: applyFuncToEach('integral')},
+        {text: 'Non-negative Derivative', handler: applyFuncToEachWithInput('nonNegativeDerivative', "Please enter a maximum value if this metric is a wrapping counter (or just leave this blank)", {allowBlank: true})},
+        {text: 'Log', handler: applyFuncToEachWithInput('log', 'Please enter a base')},
+        {text: 'timeShift', handler: applyFuncToEachWithInput('timeShift', 'Shift this metric ___ back in time (examples: 10min, 7d, 2w)', {quote: true})},
+        {text: 'Summarize', handler: applyFuncToEachWithInput('summarize', 'Please enter a summary interval (examples: 10min, 1h, 7d)', {quote: true})},
+        {text: 'Hit Count', handler: applyFuncToEachWithInput('hitcount', 'Please enter a summary interval (examples: 10min, 1h, 7d)', {quote: true})}
+      ]
+    }, {
+      text: 'Calculate',
+      menu: [
+        {text: 'Moving Average', handler: applyFuncToEachWithInput('movingAverage', 'Moving average for the last ___ data points')},
+        {text: 'Moving Standard Deviation', handler: applyFuncToEachWithInput('stdev', 'Moving standard deviation for the last ___ data points')},
+        {text: 'As Percent', handler: applyFuncToEachWithInput('asPercent', 'Please enter the value that corresponds to 100%')},
+        {text: 'Difference (of 2 series)', handler: applyFuncToAll('diffSeries')},
+        {text: 'Ratio (of 2 series)', handler: applyFuncToAll('divideSeries')}
+      ]
+    }, {
+      text: 'Filter',
+      menu: [
+        {text: 'Most Deviant', handler: applyFuncToEachWithInput('mostDeviant', 'Draw the ___ metrics with the highest standard deviation')},
+        {text: 'Highest Current Value', handler: applyFuncToEachWithInput('highestCurrent', 'Draw the ___ metrics with the highest current value')},
+        {text: 'Lowest Current Value', handler: applyFuncToEachWithInput('lowestCurrent', 'Draw the ___ metrics with the lowest current value')},
+        {text: 'Highest Maximum Value', handler: applyFuncToEachWithInput('highestMax', 'Draw the ___ metrics with the highest maximum value')},
+        {text: 'Nth Percentile Value', handler: applyFuncToEachWithInput('nPercentile', 'Draw the ___th Percentile for each metric.')},
+        {text: 'Current Value Above', handler: applyFuncToEachWithInput('currentAbove', 'Draw all metrics whose current value is above ___')},
+        {text: 'Current Value Below', handler: applyFuncToEachWithInput('currentBelow', 'Draw all metrics whose current value is below ___')},
+        {text: 'Highest Average Value', handler: applyFuncToEachWithInput('highestAverage', 'Draw the ___ metrics with the highest average value')},
+        {text: 'Lowest Average Value', handler: applyFuncToEachWithInput('lowestAverage', 'Draw the ___ metrics with the lowest average value')},
+        {text: 'Average Value Above', handler: applyFuncToEachWithInput('averageAbove', 'Draw all metrics whose average value is above ___')},
+        {text: 'Average Value Below', handler: applyFuncToEachWithInput('averageBelow', 'Draw all metrics whose average value is below ___')},
+        {text: 'Maximum Value Above', handler: applyFuncToEachWithInput('maximumAbove', 'Draw all metrics whose maximum value is above ___')},
+        {text: 'Maximum Value Below', handler: applyFuncToEachWithInput('maximumBelow', 'Draw all metrics whose maximum value is below ___')},
+        {text: 'sortByMaxima', handler: applyFuncToEach('sortByMaxima')},
+        {text: 'sortByMinima', handler: applyFuncToEach('sortByMinima')},
+        {text: 'limit', handler: applyFuncToEachWithInput('limit', 'Limit to first ___ of a list of metrics')},
+        {text: 'Exclude', handler: applyFuncToEachWithInput('exclude', 'Exclude metrics that match a regular expression')}
+      ]
+    }, {
+      text: 'Special',
+      menu: [
+        {text: 'Set Legend Name', handler: applyFuncToEachWithInput('alias', 'Enter a legend label for this graph target', {quote: true})},
+        {text: 'Color', handler: applyFuncToEachWithInput('color', 'Set the color for this graph target', {quote: true})},
+        {text: 'Aggregate By Sum', handler: applyFuncToEach('cumulative')},
+        {text: 'Draw non-zero As Infinite', handler: applyFuncToEach('drawAsInfinite')},
+        {text: 'Line Width', handler: applyFuncToEachWithInput('lineWidth', 'Please enter a line width for this graph target')},
+        {text: 'Dashed Line', handler: applyFuncToEach('dashed')},
+        {text: 'Keep Last Value', handler: applyFuncToEach('keepLastValue')},
+        {text: 'Substring', handler: applyFuncToEachWithInput('substr', 'Enter a starting position')},
+        {text: 'Add Threshold Line', handler: applyFuncToEachWithInput('threshold', 'Enter a threshold value')}
+      ]
+    }
+  ];
+}
+
+
+
+
 /* Auto-Refresh feature */
 function toggleAutoRefresh(button, pressed) {
   //A closure makes this really simple
@@ -989,7 +995,16 @@ function createOptionsMenu() {
       menuCheckItem("Graph Only", "graphOnly"),
       menuCheckItem("Hide Axes", "hideAxes"),
       menuCheckItem("Hide Grid", "hideGrid"),
-      menuCheckItem("Hide Legend", "hideLegend")
+      {
+        text: 'Graph Legend',
+        menu: {
+          items: [
+            menuRadioItem('legend', 'Hide If Too Many', 'hideLegend'),
+            menuRadioItem('legend', 'Always Hide', 'hideLegend', 'true'),
+            menuRadioItem('legend', 'Never Hide', 'hideLegend', 'false')
+          ]
+        }
+      }
     ]
   });
 
@@ -1010,7 +1025,8 @@ function createOptionsMenu() {
     ]
   });
 
-  return new Ext.menu.Menu({
+  return {
+    xtype: 'menu',
     items: [
       menuInputItem("Graph Title", "title"),
       {text: "Y Axis", menu: yAxisMenu},
@@ -1022,8 +1038,26 @@ function createOptionsMenu() {
       {text: "Display", menu: displayMenu},
       {text: "Font", menu: fontMenu}
     ]
-  });
+  };
 }
+
+/* Graph Options API */
+function updateGraph() {
+  return Composer.updateImage();
+}
+
+function getParam(param) {
+  return Composer.url.getParam(param);
+}
+
+function setParam(param, value) {
+  return Composer.url.setParam(param, value);
+}
+
+function removeParam(param) {
+  return Composer.url.removeParam(param);
+}
+/* End of Graph Options API */
 
 function createFontFacesMenu() {
   var faces = ["Times", "Courier", "Sans", "Helvetica"];
@@ -1034,8 +1068,8 @@ function createFontFacesMenu() {
       menuItems.push({
         text: face,
         handler: function (menuItem, e) {
-                   Composer.url.setParam("fontName", face);
-                   Composer.updateImage();
+                   setParam("fontName", face);
+                   updateGraph();
                  }
       });
     }
@@ -1047,8 +1081,8 @@ function createColorMenu(param) {
   var colorPicker = new Ext.menu.ColorMenu({hideOnClick: false});
   colorPicker.on('select',
     function (palette, color) {
-      Composer.url.setParam(param, color);
-      Composer.updateImage();
+      setParam(param, color);
+      updateGraph();
     }
   );
   return colorPicker;
@@ -1064,12 +1098,12 @@ function paramPrompt(question, param) {
       "Input Required",
       question,
       function (button, value) {
-        Composer.url.setParam(param, value);
-        Composer.updateImage();
+        setParam(param, value);
+        updateGraph();
       },
       this, //scope
       false, //multiline
-      Composer.url.getParam(param) || "" //default value
+      getParam(param) || "" //default value
     );
   };
 }
@@ -1082,14 +1116,14 @@ function menuCheckItem(name, param, paramValue) {
     function (item, checked) {
       if (paramValue) { // Set param to a specific value
         if (checked) {
-          Composer.url.setParam(param, paramValue);
+          setParam(param, paramValue);
         } else { // Remove the param if we're being unchecked
-          Composer.url.removeParam(param);
+          removeParam(param);
         }
       } else { // Set the param to true/false
-        Composer.url.setParam(param, checked.toString());
+        setParam(param, checked.toString());
       }
-      Composer.updateImage();
+      updateGraph();
     }
   );
   return checkItem;
@@ -1100,11 +1134,11 @@ function menuRadioItem(groupName, name, param, paramValue ) {
   selectItem.on('checkchange', 
     function( item, clicked ) {
       if( paramValue ) {
-        Composer.url.setParam(param, paramValue);
+        setParam(param, paramValue);
       } else {
-        Composer.url.removeParam(param);
+        removeParam(param);
       }
-      Composer.updateImage();
+      updateGraph();
     }
   );
   return selectItem;
@@ -1114,7 +1148,7 @@ function updateCheckItems() {
   Ext.each(checkItems,
     function (item) {
       var param = item.initialConfig.param;
-      item.setChecked( Composer.url.getParam(param) ? true : false );
+      item.setChecked(getParam(param) ? true : false, true);
     }
   );
 }

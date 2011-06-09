@@ -1,4 +1,5 @@
 import re
+import errno
 from os.path import getmtime
 from ConfigParser import ConfigParser
 from django.shortcuts import render_to_response
@@ -30,6 +31,7 @@ class DashboardConfig:
     self.ui_config['default_graph_height'] = parser.getint('ui', 'default_graph_height')
     self.ui_config['automatic_variants'] = parser.getboolean('ui', 'automatic_variants')
     self.ui_config['refresh_interval'] = parser.getint('ui', 'refresh_interval')
+    self.ui_config['merge_hover_delay'] = parser.getint('ui', 'merge_hover_delay')
 
     for section in parser.sections():
       if section == 'ui':
@@ -63,12 +65,24 @@ config = DashboardConfig()
 
 
 def dashboard(request, name=None):
-  config.check()
+  dashboard_conf_missing = False
+
+  try:
+    config.check()
+  except OSError, e:
+    if e.errno == errno.ENOENT:
+      dashboard_conf_missing = True
+    else:
+      raise
+
+  debug = request.GET.get('debug', False)
   context = {
     'schemes_json' : json.dumps(config.schemes),
     'ui_config_json' : json.dumps(config.ui_config),
-    'jsdebug' : settings.JAVASCRIPT_DEBUG,
+    'jsdebug' : debug or settings.JAVASCRIPT_DEBUG,
+    'debug' : debug,
     'querystring' : json.dumps( dict( request.GET.items() ) ),
+    'dashboard_conf_missing' : dashboard_conf_missing,
   }
 
   if name is not None:
@@ -124,6 +138,9 @@ def find(request):
   # Find all dashboard names that contain each of our query terms as a substring
   for dashboard in Dashboard.objects.all():
     name = dashboard.name.lower()
+    if name.startswith('temporary-'):
+      continue
+
     found = True # blank queries return everything
     for term in query_terms:
       if term in name:
