@@ -84,14 +84,9 @@ def expand_view(request):
   "View for expanding a pattern into matching metric paths"
   local_only = int( request.REQUEST.get('local', 0) )
 
-  if local_only:
-    store = LOCAL_STORE
-  else:
-    store = STORE
-
   results = set()
   for query in request.REQUEST.getlist('query'):
-    for node in store.find(query):
+    for node in STORE.find(query, local=local_only):
       results.add( node.metric_path )
 
   result = {
