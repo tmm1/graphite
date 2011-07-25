@@ -1,3 +1,4 @@
+import sys
 import os
 import pwd
 
@@ -45,7 +46,11 @@ def run_twistd_plugin(filename):
     __builtins__["program"] = program
 
     # Then forward applicable options to either twistd or to the plugin itself.
-    twistd_options = ["--no_save", "--reactor=epoll"]
+    twistd_options = ["--no_save"]
+
+    if sys.platform.startswith('linux'):
+      twistd_options.extend(["--reactor=epoll"])
+
     if options.debug:
         twistd_options.extend(["-n", "--logfile", "-"])
     if options.profile:
