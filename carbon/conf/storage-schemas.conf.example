@@ -3,8 +3,10 @@
 #
 #  [name]
 #  pattern = regex
+#  aggregate = (average|sum|last|min|max)
 #  retentions = timePerPoint:timeToStore, timePerPoint:timeToStore, ...
 
 [default_1min_for_1day]
 pattern = .*
+aggregate = average
 retentions = 60s:1d

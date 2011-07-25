@@ -45,6 +45,7 @@ def parseRetentionDef(retentionDef):
 
 option_parser = OptionParser(usage='''%prog path secondsPerPoint:pointsToStore [secondsPerPoint:pointsToStore]* ''')
 option_parser.add_option('--xFilesFactor', default=0.5, type='float')
+option_parser.add_option('--aggregationMethod', default='average', type='string', help="Method to use when aggregating values into lower precisions (average, sum, last, min, max)")
 option_parser.add_option('--overwrite', default=False, action='store_true')
 
 (options, args) = option_parser.parse_args()
@@ -60,7 +61,7 @@ if options.overwrite and os.path.exists(path):
   print 'Overwriting existing file: %s' % path
   os.unlink(path)
 
-whisper.create(path, archives, xFilesFactor=options.xFilesFactor)
+whisper.create(path, archives, xFilesFactor=options.xFilesFactor, aggregationMethod=options.aggregationMethod)
 
 size = os.stat(path).st_size
 print 'Created: %s (%d bytes)' % (path,size)

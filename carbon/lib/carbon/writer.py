@@ -94,11 +94,13 @@ def writeCachedDataPoints():
 
       if not dbFileExists:
         archiveConfig = None
+        aggregationMethod = None
 
         for schema in schemas:
           if schema.matches(metric):
             log.creates('new metric %s matched schema %s' % (metric, schema.name))
             archiveConfig = [archive.getTuple() for archive in schema.archives]
+            aggregationMethod = schema.aggregate
             break
 
         if not archiveConfig:
@@ -108,7 +110,7 @@ def writeCachedDataPoints():
         os.system("mkdir -p -m 755 '%s'" % dbDir)
 
         log.creates("creating database file %s" % dbFilePath)
-        whisper.create(dbFilePath, archiveConfig)
+        whisper.create(dbFilePath, archiveConfig, aggregationMethod=aggregationMethod)
         os.chmod(dbFilePath, 0755)
         increment('creates')
 
