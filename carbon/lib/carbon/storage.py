@@ -14,7 +14,7 @@ limitations under the License."""
 
 import os, re
 from os.path import join, exists
-from carbon.conf import OrderedConfigParser
+from carbon.conf import OrderedConfigParser, settings
 
 try:
   import cPickle as pickle
@@ -22,9 +22,8 @@ except ImportError:
   import pickle
 
 
-GRAPHITE_ROOT = os.environ['GRAPHITE_ROOT']
-STORAGE_SCHEMAS_CONFIG = join(GRAPHITE_ROOT, 'conf', 'storage-schemas.conf')
-STORAGE_LISTS_DIR = join(GRAPHITE_ROOT, 'storage', 'lists')
+STORAGE_SCHEMAS_CONFIG = join(settings.CONF_DIR, 'storage-schemas.conf')
+STORAGE_LISTS_DIR = join(settings.CONF_DIR, 'lists')
 
 
 UnitMultipliers = {

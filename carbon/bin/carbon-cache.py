@@ -16,10 +16,8 @@ limitations under the License."""
 import sys
 import os
 import pwd
-import optparse
 import atexit
 from os.path import basename, dirname, exists, join, isdir
-
 
 program = basename( sys.argv[0] ).split('.')[0]
 os.umask(022)
@@ -36,13 +34,10 @@ from twisted.internet import reactor
 # Figure out where we're installed
 BIN_DIR = dirname( os.path.abspath(__file__) )
 ROOT_DIR = dirname(BIN_DIR)
-STORAGE_DIR = join(ROOT_DIR, 'storage')
-LOG_DIR = join(STORAGE_DIR, 'log', 'carbon-cache')
 LIB_DIR = join(ROOT_DIR, 'lib')
-CONF_DIR = join(ROOT_DIR, 'conf')
-
 sys.path.insert(0, LIB_DIR)
 os.environ['GRAPHITE_ROOT'] = ROOT_DIR
+
 
 # Capture useful debug info for this commonly reported problem
 try:
@@ -55,36 +50,24 @@ except ImportError:
   sys.exit(1)
 
 
-# Parse command line options
-parser = optparse.OptionParser(usage='%prog [options] <start|stop|status>')
-parser.add_option('--debug', action='store_true', help='Run in the foreground, log to stdout')
-parser.add_option('--profile', help='Record performance profile data to the given file')
-parser.add_option('--pidfile', default=join(STORAGE_DIR, '%s.pid' % program), help='Write pid to the given file')
-parser.add_option('--config', default=join(CONF_DIR, 'carbon.conf'), help='Use the given config file')
-parser.add_option('--logdir', default=LOG_DIR, help="Write logs in the given directory")
-parser.add_option('--instance', default=None, help="Manage a specific carbon instnace")
+# Read config (we want failures to occur before daemonizing)
+from carbon.conf import (get_default_parser, parse_options,
+                         read_config, settings as global_settings)
 
-(options, args) = parser.parse_args()
 
-if not args:
-  parser.print_usage()
-  raise SystemExit(1)
+(options, args) = parse_options(get_default_parser(), sys.argv[1:])
+settings = read_config(program, options, ROOT_DIR=ROOT_DIR)
+global_settings.update(settings)
 
-# Assume standard locations when using --instance
-if options.instance:
-  instance = str(options.instance)
-  pidfile = join(STORAGE_DIR, '%s-%s.pid' % (program, instance))
-  logdir = "%s-%s/" % (LOG_DIR.rstrip('/'), instance)
-  config = options.config
-else:
-  instance = None
-  pidfile = options.pidfile
-  logdir = options.logdir
-  config = options.config
+instance = options.instance
+pidfile = settings.pidfile
+logdir = settings.LOG_DIR
+
 
 __builtins__.instance = instance # This isn't as evil as you might think
 __builtins__.program = program
 action = args[0]
+
 
 if action == 'stop':
   if not exists(pidfile):
@@ -129,22 +112,9 @@ elif action == 'status':
     print "%s (instance %s) is not running" % (program, instance)
     raise SystemExit(0)
 
-elif action != 'start':
-  parser.print_usage()
-  raise SystemExit(1)
-
-
 if exists(pidfile):
   print "Pidfile %s already exists, is %s already running?" % (pidfile, program)
   raise SystemExit(1)
-
-
-# Read config (we want failures to occur before daemonizing)
-from carbon.conf import settings
-settings.readFrom(config, 'cache')
-
-if instance:
-  settings.readFrom(config, 'cache:%s' % instance)
 
 # Import application components
 from carbon.log import logToStdout, logToDir
@@ -155,7 +125,7 @@ from carbon.events import metricReceived
 from carbon.util import daemonize, dropprivs, startListener
 from carbon.writer import startWriter
 
-storage_schemas = join(CONF_DIR, 'storage-schemas.conf')
+storage_schemas = join(settings.CONF_DIR, 'storage-schemas.conf')
 if not exists(storage_schemas):
   print "Error: missing required config %s" % storage_schemas
   sys.exit(1)
