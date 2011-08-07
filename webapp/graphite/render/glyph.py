@@ -350,7 +350,10 @@ class LineGraph(Graph):
                   'minorGridLineColor','thickness','min','max', \
                   'graphOnly','yMin','yMax','yLimit','yStep','areaMode', \
                   'areaAlpha','drawNullAsZero','tz', 'yAxisSide','pieMode', \
-                  'yUnitSystem', 'logBase')
+                  'yUnitSystem', 'logBase','yMinLeft','yMinRight','yMaxLeft', \
+                  'yMaxRight', 'yLimitLeft', 'yLimitRight', 'yStepLeft', \
+                  'yStepRight', 'rightWidth', 'rightColor', 'rightDashed', \
+                  'leftWidth', 'leftColor', 'leftDashed')
   validLineModes = ('staircase','slope')
   validAreaModes = ('none','first','all','stacked')
   validPieModes = ('maximum', 'minimum', 'average')
@@ -382,16 +385,16 @@ class LineGraph(Graph):
     if 'yUnitSystem' not in params:
       params['yUnitSystem'] = 'si'
     self.params = params
-
+    
     # Don't do any of the special right y-axis stuff if we're drawing 2 y-axes.
-    if self.secondYAxis == True:
+    if self.secondYAxis:
       params['yAxisSide'] = 'left'
+    
     # When Y Axis is labeled on the right, we subtract x-axis positions from the max,
     # instead of adding to the minimum
     if self.params.get('yAxisSide') == 'right':
       self.margin = self.width
     #Now to setup our LineGraph specific options
-    # print "Margin = %d" % self.margin
     self.lineWidth = float( params.get('lineWidth', 1.2) )
     self.lineMode = params.get('lineMode','slope').lower()
     assert self.lineMode in self.validLineModes, "Invalid line mode!"
@@ -399,7 +402,25 @@ class LineGraph(Graph):
     assert self.areaMode in self.validAreaModes, "Invalid area mode!"
     self.pieMode = params.get('pieMode', 'maximum').lower()
     assert self.pieMode in self.validPieModes, "Invalid pie mode!"
-
+    
+    
+    if self.secondYAxis:
+      for series in self.data:
+        if series.options.has_key('secondYAxis'):
+          if 'rightWidth' in params:
+            series.options['lineWidth'] = params['rightWidth']
+          if 'rightDashed' in params:
+            series.options['dashed'] = params['rightDashed']
+          if 'rightColor' in params:
+            series.color = params['rightColor']
+        else:
+          if 'leftWidth' in params:
+            series.options['lineWidth'] = params['leftWidth']
+          if 'leftDashed' in params:
+            series.options['dashed'] = params['leftDashed']
+          if 'leftColor' in params:
+            series.color = params['leftColor']
+    
     for series in self.data:
       if not hasattr(series, 'color'):
         series.color = self.colors.next()
@@ -530,10 +551,8 @@ class LineGraph(Graph):
       'round' : cairo.LINE_JOIN_ROUND,
       'bevel' : cairo.LINE_JOIN_BEVEL,
     }[linejoin])
-    print "entered drawLine routine."
     # stack the values
-    if self.areaMode == 'stacked' and self.secondYAxis != True: #TODO Allow stacked area mode with secondYAxis
-      print "entered stacked mode."
+    if self.areaMode == 'stacked' and not self.secondYAxis: #TODO Allow stacked area mode with secondYAxis
       total = []
       for series in self.data:
         for i in range(len(series)):
@@ -547,15 +566,12 @@ class LineGraph(Graph):
       self.data = reverse_sort(self.data)
 
     # setup the clip region
-    print "setting up clip region. Rectangle Coordinates:"
-    print " %d, %d, %d, %d, " % ( self.area['xmin'], self.area['ymin'], int(self.area['xmax'] - self.area['xmin']), int( self.area['ymax'] - self.area['ymin']  ) ) 
     self.ctx.set_line_width(1.0)
     self.ctx.rectangle(self.area['xmin'], self.area['ymin'], self.area['xmax'] - self.area['xmin'], self.area['ymax'] - self.area['ymin'])
     self.ctx.clip()
     self.ctx.set_line_width(originalWidth)
 
     if self.params.get('areaAlpha') and self.areaMode == 'first': 
-      print "Area mode  == first"
       alphaSeries = TimeSeries(None, self.data[0].start, self.data[0].end, self.data[0].step, [x for x in self.data[0]])
       alphaSeries.xStep = self.data[0].xStep
       alphaSeries.color = self.data[0].color
@@ -841,14 +857,20 @@ class LineGraph(Graph):
     if yMaxValueR is None:
       yMaxValueR = 1.0
 
-#    if 'yMax' in self.params: # TODO: Let the user split this into &yMaxLeft and &yMaxRight
-#      yMaxValue = self.params['yMax']
+    if 'yMaxLeft' in self.params: 
+      yMaxValueL = self.params['yMaxLeft']
+    if 'yMaxRight' in self.params: 
+      yMaxValueR = self.params['yMaxRight']
 
-#    if 'yLimit' in self.params and self.params['yLimit'] < yMaxValue: #TODO: Let Let the user split this into &yLimitLeft and &yLimitRight
-#      yMaxValue = self.params['yLimit']
+    if 'yLimitLeft' in self.params and self.params['yLimitLeft'] < yMaxValueL: 
+      yMaxValueL = self.params['yLimitLeft']
+    if 'yLimitRight' in self.params and self.params['yLimitRight'] < yMaxValueR: 
+      yMaxValueR = self.params['yLimitRight']
 
-#    if 'yMin' in self.params: #TODO: Let the user split this into &yLimitLeft & yLimitRight.
-#      yMinValue = self.params['yMin']
+    if 'yMinLeft' in self.params: 
+      yMinValueL = self.params['yMinLeft']
+    if 'yMinRight' in self.params: 
+      yMinValueR = self.params['yMinRight']
 
     if yMaxValueL <= yMinValueL:
       yMaxValueL = yMinValueL + 1
@@ -884,8 +906,10 @@ class LineGraph(Graph):
     self.yStepL = prettyValueL * orderFactorL #scale it back up to the order of yVariance
     self.yStepR = prettyValueR * orderFactorR 
 
-#    if 'yStep' in self.params: #TODO: Allow user to specify L & R ySteps
-#      self.yStep = self.params['yStep]
+    if 'yStepLeft' in self.params: 
+      self.yStepL = self.params['yStepLeft']
+    if 'yStepRight' in self.params: 
+      self.yStepR = self.params['yStepRight']
 
     self.yBottomL = self.yStepL * math.floor( yMinValueL / self.yStepL ) #start labels at the greatest multiple of yStepL <= yMinValue
     self.yBottomR = self.yStepR * math.floor( yMinValueR / self.yStepR ) #start labels at the greatest multiple of yStepR <= yMinValue
@@ -901,10 +925,14 @@ class LineGraph(Graph):
         raise GraphError('Logarithmic scale specified with a dataset with a '
                          'minimum value less than or equal to zero')
 
-#    if 'yMax' in self.params:
-#      self.yTop = self.params['yMax']
-#    if 'yMin' in self.params:
-#      self.yBottom = self.params['yMin']
+    if 'yMaxLeft' in self.params:
+      self.yTopL = self.params['yMaxLeft']
+    if 'yMaxRight' in self.params:
+      self.yTopR = self.params['yMaxRight']
+    if 'yMinLeft' in self.params:
+      self.yBottomL = self.params['yMinLeft']
+    if 'yMinRight' in self.params:
+      self.yBottomR = self.params['yMinRight']
 
     self.ySpanL = self.yTopL - self.yBottomL
     self.ySpanR = self.yTopR - self.yBottomR
@@ -922,30 +950,21 @@ class LineGraph(Graph):
 
     #Create and measure the Y-labels
     def makeLabel(yValue, yStep=None, ySpan=None):
-      #print "yValue %s, yStep %s, ySpan %s" %( str(yValue), str(yStep), str(ySpan) )
       yValue, prefix = format_units(yValue,yStep,system=self.params.get('yUnitSystem'))
       ySpan, spanPrefix = format_units(ySpan,yStep,system=self.params.get('yUnitSystem'))
       yValue = float(yValue)
       if yValue < 0.1:
-        #print "yValue < 0.1 returning %g, %s" % (float(yValue), prefix)
         return "%g %s" % (yValue, prefix)
       elif yValue < 1.0:
-        #print "yValue < 1.0 returning %.2f, %s" % (float(yValue), prefix)
         return "%.2f %s" % (yValue, prefix)
       if ySpan > 10 or spanPrefix != prefix:
-        #print "yValue > 10 or spanPrefix != prefix returning %d, %s" % (int(yValue), prefix)
         return "%d %s " % (int(yValue), prefix)
       elif ySpan > 3:
-        #print "ySpan > 3 returning %.1f, %s" % (float(yValue), prefix)
         return "%.1f %s " % (float(yValue), prefix)
       elif ySpan > 0.1:
-        #print "ySpan > 0.1 returning %.2f, %s" % (float(yValue), prefix)
         return "%.2f %s " % (float(yValue), prefix)
       else:
-        #print "No conditions true. returning %g, %s" % (float(yValue), prefix)
         return "%g %s" % (float(yValue), prefix)
-        
-    ## END makeLabel (wasn't clear for me - NJL)
 
     self.yLabelValuesL = self.getYLabelValues(self.yBottomL, self.yTopL, self.yStepL)
     self.yLabelValuesR = self.getYLabelValues(self.yBottomR, self.yTopR, self.yStepR)
@@ -954,17 +973,20 @@ class LineGraph(Graph):
     for value in self.yLabelValuesR: 
       self.yLabelsR.append( makeLabel(value,self.yStepR,self.ySpanR) )
     self.yLabelWidthL = max([self.getExtents(label)['width'] for label in self.yLabelsL])
-    self.yLabelWidthR = max([self.getExtents(label)['width'] for label in self.yLabelsR])
+    # The next line seems to set a value much too large in most cases
+    # By subtracting 20px, the right side axis looks much nicer.
+    # Tested with standard, binary, and none yAxis units.
+    self.yLabelWidthR = max([self.getExtents(label)['width'] for label in self.yLabelsR]) - 20 
     #scoot the graph over to the left just enough to fit the y-labels
         
-    xMin = self.margin + self.margin + (self.yLabelWidthL * 1.02)
+    #xMin = self.margin + self.margin + (self.yLabelWidthL * 1.02)
+    xMin = self.margin + (self.yLabelWidthL * 1.02)
     if self.area['xmin'] < xMin:
       self.area['xmin'] = xMin
     #scoot the graph over to the right just enough to fit the y-labels
     xMax = self.area['xmax'] - (self.yLabelWidthR * 1.02)
     if self.area['xmax'] >= xMax:
       self.area['xmax'] = xMax
-    # print "xMin %d, xMax %d" % (xMin, xMax)
 
   def getYLabelValues(self, minYValue, maxYValue, yStep=None):
     vals = []
@@ -1031,7 +1053,6 @@ class LineGraph(Graph):
           value = None
         elif yL < 0:
           yL = 0
-        # print "Drawing label %s at (%d, %d) for left axis.\n" % (labelL, xL, yL)
         self.drawText(labelL, xL, yL, align='right', valign='middle')
         
         ### Right Side
@@ -1042,10 +1063,8 @@ class LineGraph(Graph):
           valueR = None
         elif yR < 0:
           yR = 0
-        # print "Drawing label %s at (%d, %d) for right axis.\n" % (labelR, xR, yR)
         self.drawText(labelR, xR, yR, align='left', valign='middle') #Inverted for right side Y Axis
       
-
     (dt, x_label_delta) = find_x_times(self.start_dt, self.xConf['labelUnit'], self.xConf['labelStep'])
 
     #Draw the X-labels
@@ -1056,7 +1075,6 @@ class LineGraph(Graph):
       self.drawText(label, x, y, align='center', valign='top')
       dt += x_label_delta
 
-
   def drawGridLines(self):
     # Not sure how to handle this for 2 y-axes
     # Just using the left side info for the grid.  
@@ -1064,7 +1082,6 @@ class LineGraph(Graph):
     #Horizontal grid lines
     leftSide = self.area['xmin']
     rightSide = self.area['xmax']
-    # print "leftSide: %d, rightSide, %d" % (leftSide, rightSide)
     labels = []
     if self.secondYAxis:
       labels = self.yLabelValuesL
