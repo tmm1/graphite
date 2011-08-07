@@ -122,10 +122,13 @@ class Graph:
     self.userTimeZone = params.get('tz')
     self.logBase = params.get('logBase', None)
     if self.logBase:
-        if self.logBase == 'e':
-            self.logBase = math.e
-        else:
-            self.logBase = float(self.logBase)
+      if self.logBase == 'e':
+        self.logBase = math.e
+      elif self.logBase <= 0:
+        self.logBase = None
+        params['logBase'] = None
+      else:
+        self.logBase = float(self.logBase)
 
     if self.margin < 0:
       self.margin = 10
@@ -974,9 +977,9 @@ class LineGraph(Graph):
       self.yLabelsR.append( makeLabel(value,self.yStepR,self.ySpanR) )
     self.yLabelWidthL = max([self.getExtents(label)['width'] for label in self.yLabelsL])
     # The next line seems to set a value much too large in most cases
-    # By subtracting 20px, the right side axis looks much nicer.
+    # By subtracting 10 px, the right side axis looks much nicer.
     # Tested with standard, binary, and none yAxis units.
-    self.yLabelWidthR = max([self.getExtents(label)['width'] for label in self.yLabelsR]) - 20 
+    self.yLabelWidthR = max([self.getExtents(label)['width'] for label in self.yLabelsR]) - 10 
     #scoot the graph over to the left just enough to fit the y-labels
         
     #xMin = self.margin + self.margin + (self.yLabelWidthL * 1.02)

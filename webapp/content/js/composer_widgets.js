@@ -1017,6 +1017,12 @@ function createOptionsMenu() {
       
     ]
   });
+  var yAxisSideMenu = new Ext.menu.Menu({
+    items: [
+      menuRadioItem("yAxis", "Left", "yAxisSide", "left"),
+      menuRadioItem("yAxis", "Right", "yAxisSide", "right"),
+    ]
+  });
 
   var yAxisMenu = new Ext.menu.Menu({
     items: [
@@ -1025,6 +1031,8 @@ function createOptionsMenu() {
       menuInputItem("Maximum", "yMax"),
       menuInputItem("Logarithmic Scale", "logBase", "Please enter the logarithmic base to use (ie. 10, e, etc...)"),
       {text: "Unit", menu: yAxisUnitMenu},
+      {text: "Side", menu: yAxisSideMenu},
+      
       menuHelpItem("Second Y Axis", "To select metrics to associate with the second (right-side) y-axis, go into the Graph Data dialog box, highlight a metric, click Apply Functions, Special, Second Y Axis.")
     ]
   });
