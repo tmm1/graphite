@@ -156,7 +156,7 @@ class Graph:
     # Determine if we're doing a 2 y-axis graph.
 
     for series in self.data:
-      if series.options.has_key('secondYAxis'):
+      if 'secondYAxis' in series.options:
         self.dataRight.append(series)
       else:
         self.dataLeft.append(series)
@@ -301,7 +301,11 @@ class Graph:
     for line in text.split('\n'):
       self.drawText(line, x, y, align='center')
       y += lineHeight
-    self.area['ymin'] = y + self.margin
+    if self.params.get('yAxisSide') == 'right':
+      self.area['ymin'] = y 
+    else:
+      self.area['ymin'] = y + self.margin
+
 
   def drawLegend(self,elements): #elements is [ (name,color), (name,color), ... ]
     longestName = sorted([e[0] for e in elements],key=len)[-1]
@@ -372,7 +376,7 @@ class LineGraph(Graph):
                   'yMaxRight', 'yLimitLeft', 'yLimitRight', 'yStepLeft', \
                   'yStepRight', 'rightWidth', 'rightColor', 'rightDashed', \
                   'leftWidth', 'leftColor', 'leftDashed')
-  validLineModes = ('staircase','slope')
+  validLineModes = ('staircase','slope','connected')
   validAreaModes = ('none','first','all','stacked')
   validPieModes = ('maximum', 'minimum', 'average')
 
@@ -424,7 +428,7 @@ class LineGraph(Graph):
     
     if self.secondYAxis:
       for series in self.data:
-        if series.options.has_key('secondYAxis'):
+        if 'secondYAxis' in series.options:
           if 'rightWidth' in params:
             series.options['lineWidth'] = params['rightWidth']
           if 'rightDashed' in params:
@@ -601,10 +605,10 @@ class LineGraph(Graph):
 
     for series in self.data:
 
-      if series.options.has_key('lineWidth'): # adjusts the lineWidth of this line if option is set on the series
+      if 'lineWidth' in series.options: # adjusts the lineWidth of this line if option is set on the series
         self.ctx.set_line_width(series.options['lineWidth'])
 
-      if series.options.has_key('dashed'): # turn on dashing if dashed option set
+      if 'dashed' in series.options: # turn on dashing if dashed option set
         self.ctx.set_dash([ series.options['dashed'] ],1)
       else:
         self.ctx.set_dash([], 0)
@@ -620,7 +624,6 @@ class LineGraph(Graph):
           value = 0.0
 
         if value is None:
-
           if not fromNone and self.areaMode != 'none': #Close off and fill area before unknown interval
             self.ctx.line_to(x, self.area['ymax'])
             self.ctx.close_path()
@@ -629,9 +632,8 @@ class LineGraph(Graph):
           fromNone = True
 
         else:
-          
           if self.secondYAxis:
-            if series.options.has_key('secondYAxis'):
+            if 'secondYAxis' in series.options:
               y = self.getYCoord(value, "right")
             else:
               y = self.getYCoord(value, "left")
@@ -643,7 +645,7 @@ class LineGraph(Graph):
           elif y < 0:
               y = 0
 
-          if series.options.has_key('drawAsInfinite') and value > 0:
+          if 'drawAsInfinite' in series.options and value > 0:
             self.ctx.move_to(x, self.area['ymax'])
             self.ctx.line_to(x, self.area['ymin'])
             self.ctx.stroke()
@@ -652,30 +654,32 @@ class LineGraph(Graph):
 
           if self.lineMode == 'staircase':
             if fromNone:
-
               if self.areaMode != 'none':
-                self.ctx.move_to(x,self.area['ymax'])
-                self.ctx.line_to(x,y)
+                self.ctx.move_to(x, self.area['ymax'])
+                self.ctx.line_to(x, y)
               else:
-                self.ctx.move_to(x,y)
+                self.ctx.move_to(x, y)
 
             else:
-              self.ctx.line_to(x,y)
+              self.ctx.line_to(x, y)
 
             x += series.xStep
-            self.ctx.line_to(x,y)
+            self.ctx.line_to(x, y)
 
           elif self.lineMode == 'slope':
             if fromNone:
-
               if self.areaMode != 'none':
-                self.ctx.move_to(x,self.area['ymax'])
-                self.ctx.line_to(x,y)
+                self.ctx.move_to(x, self.area['ymax'])
+                self.ctx.line_to(x, y)
               else:
-                self.ctx.move_to(x,y)
+                self.ctx.move_to(x, y)
 
             x += series.xStep
             self.ctx.line_to(x,y)
+
+          elif self.lineMode == 'connected':
+            x += series.xStep
+            self.ctx.line_to(x, y)
 
           fromNone = False
 
@@ -691,7 +695,7 @@ class LineGraph(Graph):
         self.ctx.stroke()
 
       self.ctx.set_line_width(originalWidth) # return to the original line width
-      if series.options.has_key('dash'): # if we changed the dash setting before, change it back now
+      if 'dash' in series.options: # if we changed the dash setting before, change it back now
         if dash:
           self.ctx.set_dash(dash,1)
         else:
