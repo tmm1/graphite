@@ -108,7 +108,8 @@ class ListSchema(Schema):
   def __init__(self, name, archives, listName):
     Schema.__init__(self, name, archives)
     self.listName = listName
-    self.path = join(STORAGE_LISTS_DIR, listName)
+    self.archives = archives
+    self.path = join(settings.WHITELISTS_DIR, listName)
 
     if exists(self.path):
       self.mtime = os.stat(self.path).st_mtime
