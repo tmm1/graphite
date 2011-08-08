@@ -26,21 +26,18 @@ try:
 except ImportError:
   import pickle
 
-''' TODO
-Rewrite this as a general purpose search view with the following API:
-  query=some.usual.pattern.* (required)
-  filter=asdf&filter=oij (optional, default: [])
-  keepQueryPattern=true (optional, default: False)
-  maxResults=25 (optional, default: 25)
-'''
-def autocomplete_view(request):
+
+def search_view(request):
+  query = str(request.REQUEST['query'].strip())
   search_request = {
-    'query' : str(request.REQUEST['query'].strip()),
-    'filters' : [str(f.strip()) for f in request.REQUEST.getlist('filters') if f.strip()],
+    'query' : query,
     'max_results' : int( request.REQUEST.get('max_results', 25) ),
     'keep_query_pattern' : int(request.REQUEST.get('keep_query_pattern', 0)),
   }
-  results = [ dict(path=p) for p in sorted(searcher.search(**search_request)) ]
+  #if not search_request['query'].endswith('*'):
+  #  search_request['query'] += '*'
+
+  results = sorted(searcher.search(**search_request))
   result_data = json.dumps( dict(metrics=results) )
   return HttpResponse(result_data, mimetype='text/json')
 
@@ -59,6 +56,8 @@ def find_view(request):
   if untilTime == -1:
     untilTime = None
 
+  automatic_variants = int( request.REQUEST.get('automatic_variants', 0) )
+
   try:
     query = str( request.REQUEST['query'] )
   except:
@@ -69,9 +68,21 @@ def find_view(request):
   else:
     base_path = ''
 
-  log.info("received remote find request: pattern=%s from=%s until=%s local_only=%s format=%s" % (query, fromTime, untilTime, local_only, format))
+  if format == 'completer':
+    query = query.replace('..', '*.')
+    if not query.endswith('*'):
+      query += '*'
+
+    if automatic_variants:
+      query_parts = query.split('.')
+      for i,part in enumerate(query_parts):
+        if ',' in part and '{' not in part:
+          query_parts[i] = '{%s}' % part
+      query = '.'.join(query_parts)
+
   matches = list( STORE.find(query, fromTime, untilTime, local=local_only) )
   matches.sort(key=lambda node: node.name)
+  log.info("received remote find request: pattern=%s from=%s until=%s local_only=%s format=%s matches=%d" % (query, fromTime, untilTime, local_only, format, len(matches)))
 
   if format == 'treejson':
     content = tree_json(matches, base_path, wildcards=profile.advancedUI or wildcards)
@@ -82,7 +93,12 @@ def find_view(request):
     response = HttpResponse(content, mimetype='application/pickle')
 
   elif format == 'completer':
-    results = [ dict(path=node.path, name=node.name) for node in matches ]
+    results = []
+    for node in matches:
+      node_info = dict(path=node.path, name=node.name, is_leaf=str(int(node.is_leaf)))
+      if not node.isLeaf():
+        node_info['path'] += '.'
+      results.append(node_info)
 
     if len(results) > 1 and wildcards:
       wildcardNode = {'name' : '*'}

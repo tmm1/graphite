@@ -1,7 +1,7 @@
 import time
 from django.conf import settings
 from graphite.logger import log
-from graphite.util import is_local_interface
+from graphite.util import is_local_interface, is_pattern
 from graphite.remote_storage import RemoteStore
 from graphite.node import LeafNode
 from graphite.intervals import Interval, IntervalSet
@@ -123,14 +123,11 @@ class Store:
 
 
 class FindQuery:
-  isExact = property(lambda self: '*' not in self.pattern and
-                                  '?' not in self.pattern and
-                                  '[' not in self.pattern)
-
   def __init__(self, pattern, startTime, endTime):
     self.pattern = pattern
     self.startTime = startTime
     self.endTime = endTime
+    self.isExact = is_pattern(pattern)
     self.interval = Interval(float('-inf') if startTime is None else startTime,
                              float('inf') if endTime is None else endTime)
 

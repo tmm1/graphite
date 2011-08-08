@@ -158,7 +158,7 @@ class CarbonCacheOptions(usage.Options):
         self["pidfile"] = pidfile
 
         # Enforce a default umask of '022' if none was set.
-        if self.parent["umask"] is None:
+        if not self.parent.has_key("umask") or self.parent["umask"] is None:
             self.parent["umask"] = 022
 
         # Read extra settings from the configuration file.
@@ -185,6 +185,10 @@ class CarbonCacheOptions(usage.Options):
             log.msg("enabling whisper autoflush")
             whisper.AUTOFLUSH = True
 
+        if not "action" in self:
+            self["action"] = "start"
+        self.handleAction()
+
         # If we are not running in debug mode or non-daemon mode, then log to a
         # directory, otherwise log output will go to stdout.
         if not (self["debug"] or self.parent["nodaemon"]):
@@ -192,10 +196,6 @@ class CarbonCacheOptions(usage.Options):
             if not isdir(logdir):
                 os.makedirs(logdir)
             log.logToDir(logdir)
-
-        if not "action" in self:
-            self["action"] = "start"
-        self.handleAction()
 
     def parseArgs(self, action):
         """If an action was provided, store it for further processing."""
@@ -255,6 +255,7 @@ class CarbonCacheOptions(usage.Options):
                 print ("Pidfile %s already exists, is %s already running?" %
                        (pidfile, program))
                 raise SystemExit(1)
+            print "Starting %s (instance %s)" % (program, instance)
 
 
 class CarbonAggregatorOptions(CarbonCacheOptions):

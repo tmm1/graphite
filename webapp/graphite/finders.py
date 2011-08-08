@@ -5,6 +5,7 @@ from glob import glob
 from ceres import CeresTree, CeresNode, setDefaultSliceCachingBehavior
 from graphite.node import BranchNode, LeafNode
 from graphite.readers import CeresReader, WhisperReader, GzippedWhisperReader, RRDReader
+from graphite.util import find_escaped_pattern_fields
 
 
 #setDefaultSliceCachingBehavior('all')
@@ -38,9 +39,10 @@ class StandardFinder:
     self.directories = directories
 
   def find_nodes(self, query):
-    for root_dir in self.directories:
-      pattern_parts = query.pattern.split('.')
+    clean_pattern = query.pattern.replace('\\', '')
+    pattern_parts = clean_pattern.split('.')
 
+    for root_dir in self.directories:
       for absolute_path in self._find_paths(root_dir, pattern_parts):
         if basename(absolute_path).startswith('.'):
           continue
@@ -53,6 +55,11 @@ class StandardFinder:
         relative_path = absolute_path[ len(root_dir): ].lstrip('/')
         metric_path = fs_to_metric(relative_path)
         real_metric_path = get_real_metric_path(absolute_path, metric_path)
+
+        metric_path_parts = metric_path.split('.')
+        for field_index in find_escaped_pattern_fields(query.pattern):
+          metric_path_parts[field_index] = pattern_parts[field_index].replace('\\', '')
+        metric_path = '.'.join(metric_path_parts)
 
         # Now we construct and yield an appropriate Node object
         if isdir(absolute_path):
