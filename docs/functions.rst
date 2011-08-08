@@ -1,5 +1,5 @@
 Functions
 =========
 
-.. automodule:: functions
-  :members:   
+.. automodule:: graphite.render.functions
+  :members:
