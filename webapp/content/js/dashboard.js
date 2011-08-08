@@ -102,7 +102,15 @@ var originalDefaultGraphParams = {
   width: UI_CONFIG.default_graph_width,
   height: UI_CONFIG.default_graph_height
 };
-var defaultGraphParams = Ext.apply({}, originalDefaultGraphParams);
+var defaultGraphParams;
+//XXX
+// Per-session default graph params
+var sessionDefaultParamsJson = cookieProvider.get('defaultGraphParams');
+if (sessionDefaultParamsJson && sessionDefaultParamsJson.length > 0) {
+  defaultGraphParams = Ext.decode(sessionDefaultParamsJson);
+} else {
+  defaultGraphParams = Ext.apply({}, originalDefaultGraphParams);
+}
 
 
 function initDashboard () {
@@ -267,8 +275,8 @@ function initDashboard () {
             ) ? "metric-not-toggled" : "metric-toggled";
           var branchClass = (
             record.data['is_leaf'] == '0'
-          ) ? "branch-node" : "";
-          return toggledClass + ' ' + branchClass + ' terminalStyle';
+          ) ? "result-is-branch-node" : "";
+          return toggledClass + ' ' + branchClass + ' metric-result';
         }
       },
       selModel: new Ext.grid.RowSelectionModel({
@@ -292,8 +300,10 @@ function initDashboard () {
                     if (record.data['is_leaf'] == '1') {
                       graphAreaToggle(record.data.path);
                       thisGrid.getView().refresh();
+                    } else {
+                      metricSelectorTextField.setValue(record.data.path);
                     }
-                    thisGrid.getSelectionModel().clearSelections();
+                    autocompleteTask.delay(50);
                     focusCompleter();
                   }
       }
@@ -312,7 +322,7 @@ function initDashboard () {
     metricSelectorTextField = new Ext.form.TextField({
       region: 'south',
       enableKeyEvents: true,
-      cls: 'terminalStyle',
+      cls: 'completer-input-field',
       listeners: {
         keypress: completerKeyPress,
         specialkey: completerKeyPress,
@@ -638,7 +648,7 @@ function initDashboard () {
     region: 'center',
     layout: 'fit',
     autoScroll: false,
-    bodyCssClass: 'graphAreaBody',
+    bodyCssClass: 'graph-area-body',
     items: [graphView],
     tbar: new Ext.Toolbar({
       items: [
@@ -983,17 +993,20 @@ function startTask(task) {
 }
 
 /* Time Range management */
+defaultGraphParams['from'].match(/([0-9]+)([^0-9]+)/);
+var defaultRelativeQuantity = RegExp.$1;
+var defaultRelativeUnits = RegExp.$2;
 var TimeRange = {
   // Default to a relative time range
   type: 'relative',
-  quantity: '2',
-  units: 'hours',
+  quantity: defaultRelativeQuantity,
+  units: defaultRelativeUnits,
   // Absolute time range
   startDate: new Date(),
   startTime: "9:00 AM",
   endDate: new Date(),
   endTime: "5:00 PM"
-}
+};
 
 function getTimeText() {
   if (TimeRange.type == 'relative') {
@@ -1018,6 +1031,7 @@ function timeRangeUpdated() {
   }
   defaultGraphParams.from = fromParam;
   defaultGraphParams.until = untilParam;
+  saveDefaultGraphParams();
 
   graphStore.each(function () {
     this.data.params.from = fromParam;
@@ -1157,6 +1171,7 @@ function editDefaultGraphParameters() {
     var params = Ext.urlDecode(paramsString);
     copyUneditable(defaultGraphParams, params);
     defaultGraphParams = params;
+    saveDefaultGraphParams();
     refreshGraphs();
     win.close();
   }
@@ -1252,6 +1267,7 @@ function selectGraphSize() {
   function resize() {
     GraphSize.width = defaultGraphParams.width = widthField.getValue();
     GraphSize.height = defaultGraphParams.height = heightField.getValue();
+    saveDefaultGraphParams();
     win.close();
     refreshGraphs();
   }
@@ -2330,6 +2346,11 @@ function removeOuterCall() { // blatantly repurposed from composer_widgets.js (d
   });
   refreshGraphs();
 }
+
+function saveDefaultGraphParams() {
+  cookieProvider.set('defaultGraphParams', Ext.encode(defaultGraphParams));
+}
+
 
 /* Cookie stuff */
 function getContextFieldCookie(field) {

@@ -17,12 +17,14 @@ from os.path import exists
 
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPServer, TCPClient, UDPServer
-from twisted.internet.protocol import ServerFactory
+import carbon.instrumentation # fulfill import deps to avoid circularities
+from carbon.protocols import protocolManager
 
 
 def createBaseService(config):
     from carbon.conf import settings
-    from carbon.listeners import MetricLineReceiver, MetricPickleReceiver, MetricDatagramReceiver
+    from carbon.protocols import (MetricLineReceiver, MetricPickleReceiver,
+                                  MetricDatagramReceiver)
 
     root_service = MultiService()
     root_service.setName(settings.program)
@@ -47,16 +49,16 @@ def createBaseService(config):
                                       (settings.PICKLE_RECEIVER_INTERFACE,
                                        settings.PICKLE_RECEIVER_PORT,
                                        MetricPickleReceiver)):
-        factory = ServerFactory()
-        factory.protocol = protocol
-        service = TCPServer(int(port), factory, interface=interface)
-        service.setServiceParent(root_service)
+        if port:
+            factory = protocolManager.createFactory(protocol)
+            service = TCPServer(int(port), factory, interface=interface)
+            service.setServiceParent(root_service)
 
     if settings.ENABLE_UDP_LISTENER:
-      service = UDPServer(int(settings.UDP_RECEIVER_PORT),
-                          MetricDatagramReceiver(),
-                          interface=settings.UDP_RECEIVER_INTERFACE)
-      service.setServiceParent(root_service)
+        service = UDPServer(int(settings.UDP_RECEIVER_PORT),
+                            MetricDatagramReceiver(),
+                            interface=settings.UDP_RECEIVER_INTERFACE)
+        service.setServiceParent(root_service)
 
     if use_amqp:
         factory = amqp_listener.createAMQPListener(
@@ -95,14 +97,13 @@ def createCacheService(config):
     from carbon.cache import MetricCache
     from carbon.conf import settings
     from carbon.events import metricReceived
-    from carbon.listeners import CacheQueryHandler
+    from carbon.protocols import CacheQueryHandler
 
     # Configure application components
     metricReceived.installHandler(MetricCache.store)
 
     root_service = createBaseService(config)
-    factory = ServerFactory()
-    factory.protocol = CacheQueryHandler
+    factory = protocolManager.createFactory(CacheQueryHandler)
     service = TCPServer(int(settings.CACHE_QUERY_PORT), factory,
                         interface=settings.CACHE_QUERY_INTERFACE)
     service.setServiceParent(root_service)

@@ -19,7 +19,7 @@ plugin_files = [ ('plugins/maintenance', glob('plugins/maintenance/*.py')) ]
 
 setup(
   name='carbon',
-  version='1.1.0',
+  version='1.1.0-alpha1',
   url='https://launchpad.net/graphite',
   author='Chris Davis',
   author_email='chrismd@gmail.com',
