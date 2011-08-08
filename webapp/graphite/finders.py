@@ -140,6 +140,12 @@ def get_real_metric_path(absolute_path, metric_path):
 
   return metric_path
 
+def _deduplicate(entries):
+  yielded = set()
+  for entry in entries:
+    if entry not in yielded:
+      yielded.add(entry)
+      yield entry
 
 def match_entries(entries, pattern):
   """A drop-in replacement for fnmatch.filter that supports pattern
@@ -154,7 +160,9 @@ def match_entries(entries, pattern):
     for variant in variants:
       matching.extend( fnmatch.filter(entries, variant) )
 
-    return list( set(matching) ) #remove potential dupes
+    return list( _deduplicate(matching) ) #remove dupes without changing order
 
   else:
-    return fnmatch.filter(entries, pattern)
+    matching = fnmatch.filter(entries, pattern)
+    matching.sort()
+    return matching
