@@ -69,9 +69,9 @@ REMOTE_READER_CACHE_SIZE_LIMIT = 1000
 
 #Memcache settings
 MEMCACHE_HOSTS = []
-MEMCACHE_DURATION = 60 #metric data and graphs are cached for one minute by default
 FIND_CACHE_DURATION = 300
 FIND_TOLERANCE = 2 * FIND_CACHE_DURATION
+DEFAULT_CACHE_DURATION = 60 #metric data and graphs are cached for one minute by default
 LOG_CACHE_PERFORMANCE = False
 
 #Remote rendering settings
@@ -131,7 +131,7 @@ except ImportError:
 APPEND_SLASH = False
 TEMPLATE_DEBUG = DEBUG
 if MEMCACHE_HOSTS:
-  CACHE_BACKEND = 'memcached://' + ';'.join(MEMCACHE_HOSTS) + ('/?timeout=%d' % MEMCACHE_DURATION)
+  CACHE_BACKEND = 'memcached://' + ';'.join(MEMCACHE_HOSTS) + ('/?timeout=%d' % DEFAULT_CACHE_DURATION)
 else:
   CACHE_BACKEND = "dummy:///"
 

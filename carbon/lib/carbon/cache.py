@@ -33,10 +33,8 @@ class MetricCache(dict):
     metric = '.'.join(part for part in metric.split('.') if part) # normalize the path
     try:
       self.lock.acquire()
-      datapoints = self.get(metric, [])
-      datapoints.append(datapoint)
+      self.setdefault(metric, []).append(datapoint)
       self.size += 1
-      dict.__setitem__(self, metric, datapoints)
     finally:
       self.lock.release()
 
