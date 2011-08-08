@@ -5,29 +5,34 @@ from django.conf import settings
 from graphite.logger import log
 from graphite.storage import is_pattern, match_entries
 
+
 class IndexSearcher:
   def __init__(self, index_path):
     self.index_path = index_path
-    if not os.path.isfile(index_path) and os.path.exists(index_path):
-      log.exception("%s does not appear to be a file." % str(index_path));
-    else:
+    if not os.path.exists(index_path):
+      open(index_path, 'w').close() # touch the file to prevent re-entry down this code path
       build_index_path = os.path.join(settings.GRAPHITE_ROOT, "bin/build-index.sh")
       retcode = subprocess.call(build_index_path)
       if retcode != 0:
-        log.exception("Couldn't build index file %s" % str(index_path))
+        log.exception("Couldn't build index file %s" % index_path)
+        raise RuntimeError("Couldn't build index file %s" % index_path)
     self.last_mtime = 0
     self._tree = (None, {}) # (data, children)
+    log.info("[IndexSearcher] performing initial index load")
+    self.reload()
 
   @property
   def tree(self):
     current_mtime = os.path.getmtime(self.index_path)
     if current_mtime > self.last_mtime:
+      log.info("[IndexSearcher] reloading stale index, current_mtime=%s last_mtime=%s" %
+               (current_mtime, self.last_mtime))
       self.reload()
 
     return self._tree
 
   def reload(self):
-    log.info("SearchIndex: reloading data from %s" % self.index_path)
+    log.info("[IndexSearcher] reading index data from %s" % self.index_path)
     t = time.time()
     total_entries = 0
     tree = (None, {}) # (data, children)
@@ -51,22 +56,22 @@ class IndexSearcher:
 
     self._tree = tree
     self.last_mtime = os.path.getmtime(self.index_path)
-    log.info("SearchIndex: index reload took %.6f seconds (%d entries)" % (time.time() - t, total_entries))
+    log.info("[IndexSearcher] index reload took %.6f seconds (%d entries)" % (time.time() - t, total_entries))
 
   def search(self, query, filters=(), max_results=None, keep_query_pattern=False):
     query_parts = query.split('.')
     filters = [f.lower() for f in filters]
-    results_found = 0
+    results_found = set()
     for result in self.subtree_query(self.tree, query_parts):
       # Overlay the query pattern on the resulting paths
       if keep_query_pattern:
         result_parts = result.split('.')
         result = '.'.join(query_parts + result_parts[len(query_parts):])
 
-      if self.apply_filters(result.lower(), filters):
+      if result not in results_found and self.apply_filters(result.lower(), filters):
         yield result
-        results_found += 1
-        if max_results is not None and results_found >= max_results:
+        results_found.add(result)
+        if max_results is not None and len(results_found) >= max_results:
           return
 
   def subtree_query(self, root, query_parts):
@@ -106,4 +111,3 @@ class SearchIndexCorrupt(StandardError):
 
 
 searcher = IndexSearcher(settings.INDEX_FILE)
-searcher.reload()
