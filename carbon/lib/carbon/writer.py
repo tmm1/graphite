@@ -14,9 +14,16 @@ limitations under the License."""
 
 
 import time
-from threading import Thread
+from os.path import join, exists, dirname, basename
+
+try:
+  import cPickle as pickle
+except ImportError:
+  import pickle
+
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
+from twisted.application.service import Service
 from carbon.cache import MetricCache
 from carbon.storage import loadStorageSchemas
 from carbon.conf import settings
@@ -106,10 +113,16 @@ def reloadStorageSchemas():
     log.err()
 
 
-schemaReloadTask = LoopingCall(reloadStorageSchemas)
-schemas = loadStorageSchemas()
+class WriterService(Service):
 
+    def __init__(self):
+        self.reload_task = LoopingCall(reloadStorageSchemas)
 
-def startWriter():
-  schemaReloadTask.start(60)
-  reactor.callInThread(writeForever)
+    def startService(self):
+        self.reload_task.start(60, False)
+        reactor.callInThread(writeForever)
+        Service.startService(self)
+
+    def stopService(self):
+        self.reload_task.stop()
+        Service.stopService(self)
