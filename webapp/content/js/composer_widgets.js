@@ -996,6 +996,7 @@ function createOptionsMenu() {
         menuRadioItem("line", "Slope Line (default)", "lineMode", ""),
         menuRadioItem("line", "Staircase Line", "lineMode", "staircase"),
         menuRadioItem("line", "Connected Line", "lineMode", "connected"),
+        menuCheckItem("Draw Null as Zero", "drawNullAsZero")
     ]
   });
   

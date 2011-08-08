@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License."""
 
 import os, re
+
 from os.path import join, exists
 from carbon.conf import OrderedConfigParser, settings
 
@@ -65,7 +66,6 @@ def parseRetentionDefinition(retentionDef):
   return (precision, points)
 
 
-
 class Schema:
   def __init__(self, name, archives):
     self.name = name
@@ -87,14 +87,28 @@ class Schema:
 
 
 class DefaultSchema(Schema):
+<<<<<<< TREE
+=======
+
+  def __init__(self, name, archives):
+    self.name = name
+    self.archives = archives
+
+>>>>>>> MERGE-SOURCE
   def test(self, metric):
     return True
 
 
 
 class PatternSchema(Schema):
+<<<<<<< TREE
   def __init__(self, name, archives, pattern):
     Schema.__init__(self, name, archives)
+=======
+
+  def __init__(self, name, pattern, archives):
+    self.name = name
+>>>>>>> MERGE-SOURCE
     self.pattern = pattern
     self.regex = re.compile(pattern)
 
@@ -105,8 +119,14 @@ class PatternSchema(Schema):
 
 
 class ListSchema(Schema):
+<<<<<<< TREE
   def __init__(self, name, archives, listName):
     Schema.__init__(self, name, archives)
+=======
+
+  def __init__(self, name, listName, archives):
+    self.name = name
+>>>>>>> MERGE-SOURCE
     self.listName = listName
     self.archives = archives
     self.path = join(settings.WHITELISTS_DIR, listName)
@@ -137,10 +157,17 @@ class ListSchema(Schema):
 
 
 class Archive:
+<<<<<<< TREE
   def __init__(self, secondsPerPoint, points):
     self.secondsPerPoint = int( secondsPerPoint )
     self.points = int( points )
     self.config = (self.secondsPerPoint, self.points)
+=======
+
+  def __init__(self,secondsPerPoint,points):
+    self.secondsPerPoint = int(secondsPerPoint)
+    self.points = int(points)
+>>>>>>> MERGE-SOURCE
 
 
   def getTuple(self):
@@ -149,7 +176,7 @@ class Archive:
 
   @staticmethod
   def fromString(retentionDef):
-    (secondsPerPoint, points) = parseRetentionDefinition(retentionDef)
+    (secondsPerPoint, points) = parseRetentionDef(retentionDef)
     return Archive(secondsPerPoint, points)
 
 
@@ -185,9 +212,9 @@ def loadStorageSchemas():
     else:
       raise ValueError('schema "%s" has no pattern or list parameter configured' % schemaName)
 
-    schemaList.append( mySchema )
+    schemaList.append(mySchema)
 
-  schemaList.append( defaultSchema )
+  schemaList.append(defaultSchema)
   return schemaList
 
 

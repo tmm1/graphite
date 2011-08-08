@@ -23,6 +23,15 @@ defaultUIConfig = {
   'merge_hover_delay'    : 700,
   'theme'                : 'default',
 }
+defaultKeyboardShortcuts = {
+  'toggle_toolbar' : 'ctrl-z',
+  'toggle_metrics_panel' : 'ctrl-space',
+  'erase_all_graphs' : 'alt-x',
+  'save_dashboard' : 'alt-s',
+  'completer_add_metrics' : 'alt-enter',
+  'completer_del_metrics' : 'alt-backspace',
+  'give_completer_focus' : 'shift-space',
+}
 
 
 class DashboardConfig:
@@ -42,7 +51,10 @@ class DashboardConfig:
 
     for option, default_value in defaultUIConfig.items():
       if parser.has_option('ui', option):
-        self.ui_config[option] = parser.getint('ui', option)
+        try:
+          self.ui_config[option] = parser.getint('ui', option)
+        except ValueError:
+          self.ui_config[option] = parser.get('ui', option)
       else:
         self.ui_config[option] = default_value
 
@@ -51,8 +63,12 @@ class DashboardConfig:
     else:
       self.ui_config['automatic_variants'] = True
 
+    self.ui_config['keyboard_shortcuts'] = defaultKeyboardShortcuts.copy()
+    if parser.has_section('keyboard-shortcuts'):
+      self.ui_config['keyboard_shortcuts'].update( parser.items('keyboard-shortcuts') )
+
     for section in parser.sections():
-      if section == 'ui':
+      if section in ('ui', 'keyboard-shortcuts'):
         continue
 
       scheme = parser.get(section, 'scheme')

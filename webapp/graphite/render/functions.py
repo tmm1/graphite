@@ -1,16 +1,21 @@
-"""Copyright 2008 Orbitz WorldWide
+#Copyright 2008 Orbitz WorldWide
+#
+#Licensed under the Apache License, Version 2.0 (the "License");
+#you may not use this file except in compliance with the License.
+#You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+#Unless required by applicable law or agreed to in writing, software
+#distributed under the License is distributed on an "AS IS" BASIS,
+#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#See the License for the specific language governing permissions and
+#limitations under the License.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License."""
+"""
+These functions are used on the metrics passed in the '&target='
+URL parameters to change the data being graphed in some way.
+"""
 
 import time
 import math
@@ -60,7 +65,6 @@ def safeMax(values):
     return max(safeValues)
 
 def lcm(a,b):
-  'least common multiple'
   if a == b: return a
   if a < b: (a,b) = (b,a) #ensure a > b
   for i in xrange(1,a * b):
@@ -192,9 +196,6 @@ def averageSeries(requestContext, *seriesLists):
 
 def minSeries(requestContext, *seriesLists):
   """
-  minSeries
-  ---------
-
   Takes one metric or a wildcard seriesList.
   For each datapoint from each metric passed in, pick the minimum value and graph it.
 
@@ -203,7 +204,6 @@ def minSeries(requestContext, *seriesLists):
   .. code-block:: none
       
     &target=minSeries(Server*.connections.total)
-
   """
   (seriesList, start, end, step) = normalize(seriesLists)
   pathExprs = list( set([s.pathExpression for s in seriesList]) )
@@ -265,7 +265,7 @@ def asPercent(requestContext, seriesList1, seriesList2orNumber):
 
   .. code-block:: none
 
-    &target=asPercent(Server01.connections.failed,Server01.connetions,total)
+    &target=asPercent(Server01.connections.failed,Server01.connections,total)
     &target=asPercent(apache01.threads.busy,1500)
 
   """
@@ -300,7 +300,7 @@ def divideSeries(requestContext, dividendSeriesList, divisorSeriesList):
 
   Takes a dividend metric and a divisor metric and draws the division result.
   A constant may *not* be passed. To divide by a constant, use the scale() 
-  function (which is essetially a muliplication operation) and use the inverse
+  function (which is essentially a multiplication operation) and use the inverse
   of the dividend. (Division by 8 = multiplication by 1/8 or 0.125)
 
   Example:
@@ -443,9 +443,9 @@ def derivative(requestContext, seriesList):
 
   Example:
 
-    .. code-block:: none
+  .. code-block:: none
 
-      &target=derivative(company.server.application01.ifconfig.TXPackets)
+    &target=derivative(company.server.application01.ifconfig.TXPackets)
 
   Each time you run ifconfig, the RX and TXPackets are higher (assuming there
   is network traffic.) By applying the derivative function, you can get an 
@@ -481,7 +481,9 @@ def integral(requestContext, seriesList):
 
     &target=integral(company.sales.perMinute)
 
-    This whould show the total sales for the time period selected.
+  This would start at zero on the left side of the graph, adding the sales each
+  minute, and show the total sales for the time period selected at the right 
+  side, (time now, or the time specified by '&until=').
   """
   results = []
   for series in seriesList:
@@ -508,11 +510,11 @@ def nonNegativeDerivative(requestContext, seriesList, maxValue=None):
   reset. (Such as if a network interface is destroyed and recreated by unloading 
   and re-loading a kernel module, common with USB / WiFi cards.
 
-      Example:
+  Example:
 
-      .. code-block:: none
+  .. code-block:: none
         
-        &target=derivative(company.server.application01.ifconfig.TXPackets)
+    &target=derivative(company.server.application01.ifconfig.TXPackets)
 
   """
   results = []
@@ -577,6 +579,7 @@ def substr(requestContext, seriesList, start=0, stop=0):
   Example:
 
   .. code-block:: none
+    
     &target=substr(carbon.agents.hostname.avgUpdateTime,2,4))
 
   The label would be printed as "hostname.avgUpdateTime".
@@ -873,7 +876,7 @@ def limit(requestContext, seriesList, n):
 
   Example:
 
-  .. code-block:: 
+  .. code-block:: none
 
     &target=limit(server*.instance*.memory.free,5)
 
@@ -894,12 +897,14 @@ def sortByMaxima(requestContext, seriesList):
 
   Example:
 
-  .. code-block:: 
+  .. code-block:: none
 
     &target=sortByMaxima(server*.instance*.memory.free)
 
   """
   def compare(x,y):
+  
+
     return cmp(max(y), max(x))
   seriesList.sort(compare)
   return seriesList
@@ -914,7 +919,7 @@ def sortByMinima(requestContext, seriesList):
 
   Example:
 
-  .. code-block:: 
+  .. code-block:: none 
 
     &target=sortByMinima(server*.instance*.memory.free)
 
@@ -930,12 +935,12 @@ def mostDeviant(requestContext, n, seriesList):
   
   Takes an integer N followed by one metric or a wildcard seriesList.
   Draws the N most deviant metrics.
-  To find the deiviant, the average across all metrics passed is determined, 
+  To find the deviant, the average across all metrics passed is determined, 
   and then the average of each metric is compared to the overall average.
 
     Example:
 
-  .. code-block:: 
+  .. code-block:: none
 
     &target=sortByMaxima(5, server*.instance*.memory.free)
 
@@ -1186,7 +1191,7 @@ def group(requestContext, *seriesLists):
 def exclude(requestContext, seriesList, pattern):
   """
   Takes a metric or a wildcard seriesList, followed by a regular expression
-  in double quotes.  Exludes metrics that match the regular expression. 
+  in double quotes.  Excludes metrics that match the regular expression. 
 
   Example: 
 
@@ -1238,7 +1243,8 @@ def summarize(requestContext, seriesList, intervalString):
 
 
 def hitcount(requestContext, seriesList, intervalString):
-  """Estimate hit counts from a list of time series.
+  """
+  Estimate hit counts from a list of time series.
 
   This function assumes the values in each time series represent
   hits per second.  It calculates hits per some larger interval
