@@ -63,6 +63,16 @@ defaults = dict(
 def _umask(value):
     return int(value, 8)
 
+def _process_alive(pid):
+    if exists("/proc"):
+        return exists("/proc/%d" % pid)
+    else:
+        try:
+            os.kill(int(pid), 0)
+            return True
+        except OSError, err:
+            return err.errno == errno.EPERM
+
 
 class OrderedConfigParser(ConfigParser):
   """Hacky workaround to ensure sections are always returned in the order
@@ -248,7 +258,7 @@ class CarbonCacheOptions(usage.Options):
                 print "Failed to read pid from %s" % pidfile
                 raise SystemExit(1)
 
-            if exists("/proc/%d" % pid):
+            if _process_alive(pid):
                 print ("%s (instance %s) is running with pid %d" %
                        (program, instance, pid))
                 raise SystemExit(0)
@@ -407,17 +417,28 @@ def read_config(program, options, **kwargs):
     settings.setdefault(
         "LOG_DIR", join(settings["STORAGE_DIR"], "log", program))
 
+    # Storage directory holds whisper and whitelist data by default.
+    settings.setdefault(
+        "LOCAL_DATA_DIR", join(settings["STORAGE_DIR"], "whisper"))
+    settings.setdefault(
+        "WHITELISTS_DIR", join(settings["STORAGE_DIR"], "lists"))
+
     # Read configuration options from program-specific section.
     section = program[len("carbon-"):]
-    settings.readFrom(options["config"], section)
+    config = options["config"]
 
+    if not exists(config):
+        print "Error: missing required config %s" % config
+        sys.exit(1)
+
+    settings.readFrom(config, section)
     settings.setdefault("instance", options["instance"])
 
     # If a specific instance of the program is specified, augment the settings
     # with the instance-specific settings and provide sane defaults for
     # optional settings.
     if options["instance"]:
-        settings.readFrom(options["config"],
+        settings.readFrom(config,
                           "%s:%s" % (section, options["instance"]))
         settings["pidfile"] = (
             options["pidfile"] or

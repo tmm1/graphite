@@ -29,9 +29,7 @@ def run_twistd_plugin(filename):
 
     bin_dir = dirname(abspath(filename))
     root_dir = dirname(bin_dir)
-    storage_dir = join(root_dir, 'storage')
     os.environ.setdefault('GRAPHITE_ROOT', root_dir)
-    os.environ.setdefault('GRAPHITE_STORAGE_DIR', storage_dir)
 
     program = basename(filename).split('.')[0]
 
@@ -61,6 +59,9 @@ def run_twistd_plugin(filename):
 
     if options.debug:
         twistd_options.extend(["-n", "--logfile", "-"])
+    else:
+        twistd_options.extend(["--logfile", "/dev/null"])
+
     if options.profile:
         twistd_options.append("--profile")
     if options.pidfile:
