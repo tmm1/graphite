@@ -35,12 +35,16 @@ defaults = dict(
   MAX_CREATES_PER_MINUTE='inf',
   LINE_RECEIVER_INTERFACE='0.0.0.0',
   LINE_RECEIVER_PORT=2003,
+  ENABLE_UDP_LISTENER=False,
+  UDP_RECEIVER_INTERFACE='0.0.0.0',
+  UDP_RECEIVER_PORT=2003,
   PICKLE_RECEIVER_INTERFACE='0.0.0.0',
   PICKLE_RECEIVER_PORT=2004,
   CACHE_QUERY_INTERFACE='0.0.0.0',
   CACHE_QUERY_PORT=7002,
   LOG_UPDATES=True,
   MAX_DATAPOINTS_PER_MESSAGE=500,
+  MAX_AGGREGATION_INTERVALS=5,
   ENABLE_AMQP=False,
   AMQP_VERBOSE=False,
   BIND_PATTERNS=['#'],
@@ -235,7 +239,7 @@ class CarbonCacheOptions(usage.Options):
         elif action == "status":
             if not exists(pidfile):
                 print "%s (instance %s) is not running" % (program, instance)
-                raise SystemExit(0)
+                raise SystemExit(1)
             pf = open(pidfile, "r")
             try:
                 pid = int(pf.read().strip())
@@ -249,7 +253,7 @@ class CarbonCacheOptions(usage.Options):
                 raise SystemExit(0)
             else:
                 print "%s (instance %s) is not running" % (program, instance)
-                raise SystemExit(0)
+                raise SystemExit(1)
         elif action == "start":
             if exists(pidfile):
                 print ("Pidfile %s already exists, is %s already running?" %
