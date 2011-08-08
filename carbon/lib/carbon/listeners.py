@@ -13,6 +13,20 @@ except ImportError:
   import pickle
 
 
+class LoggingMixin:
+  def connectionMade(self):
+    self.peer = self.transport.getPeer()
+    self.peerAddr = "%s:%d" % (self.peer.host, self.peer.port)
+    log.listener("%s connection with %s established" % (self.__class__.__name__, self.peerAddr))
+
+  def connectionLost(self, reason):
+    if reason.check(ConnectionDone):
+      log.listener("%s connection with %s closed cleanly" % (self.__class__.__name__, self.peerAddr))
+    else:
+      log.listener("%s connection with %s lost: %s" % (self.__class__.__name__, self.peerAddr, reason.value))
+    self.factory.clientDisconnected(self)
+
+
 class MetricLineReceiver(LoggingMixin, LineOnlyReceiver):
   delimiter = '\n'
 
@@ -73,6 +87,56 @@ class CacheQueryHandler(LoggingMixin, Int32StringReceiver):
     increment('cacheQueries')
 
 
+class ReceiverFactory(Factory):
+  def startFactory(self):
+    self.clients = []
+
+  def buildProtocol(self, addr):
+    p = self.protocol()
+    p.factory = self
+    self.clients.append(p)
+
+  def clientDisconnected(self, client):
+    if client in self.clients:
+      self.clients.remove(client)
+
+
+class ClientManager:
+  def __init__(self):
+    self.factories = []
+    self.clientsPaused = False
+
+  def createFactory(self, protocol):
+    factory = ReceiverFactory()
+    factory.protocol = protocol
+    self.factories.append(factory)
+    return factory
+
+  @property
+  def clients(self):
+    for factory in self.factories:
+      for client in factory.clients:
+        yield client
+
+  def pauseAllClients(self):
+    log.listener("ClientManager.pauseAllClients")
+    for client in self.clients:
+      client.transport.pauseProducing()
+    self.clientsPaused = True
+
+  def resumeAllClients(self):
+    log.listener("ClientManager.resumeAllClients")
+    for client in self.clients:
+      client.transport.resumeProducing()
+    self.clientsPaused = False
+
+
+ClientManager = ClientManager() # ghetto singleton
+
+
+def startListener(interface, port, protocol):
+  factory = ClientManager.createFactory(protocol)
+  return reactor.listenTCP( int(port), factory, interface=interface )
 
 # Avoid import circularity
 from carbon.instrumentation import increment

@@ -117,6 +117,7 @@ def renderView(request):
       log.rendering('Total pickle rendering time %.6f' % (time() - start))
       return response
 
+    format = requestOptions.get('format')
     if format == 'csv':
       response = HttpResponse(mimetype='text/csv')
       writer = csv.writer(response, dialect='excel')
