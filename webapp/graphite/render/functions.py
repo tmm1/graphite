@@ -612,6 +612,9 @@ def substr(requestContext, seriesList, start=0, stop=0):
       series.name = '.'.join(cleanName.split('.')[int(start)::])
     else:
       series.name = '.'.join(cleanName.split('.')[int(start):int(stop):])
+
+    # substr(func(a.b,'c'),1) becomes b instead of b,'c'
+    series.name = re.sub(',.*$', '', series.name)
   return seriesList
 
 
@@ -1198,16 +1201,27 @@ def exclude(requestContext, seriesList, pattern):
   return [s for s in seriesList if not regex.search(s.name)]
 
 
-def summarize(requestContext, seriesList, intervalString):
+def summarize(requestContext, seriesList, intervalString, func='sum'):
   """
   Summarize the data into interval buckets of a certain size.
+
+  By default, the contents of each interval bucket are summed together. This is
+  useful for counters where each increment represents a discrete event and
+  retrieving a "per X" value requires summing all the events in that interval.
+
+  Specifying 'avg' instead will return the mean for each bucket, which can be more
+  useful when the value is a gauge that represents a certain value in time.
+
+  'max', 'min' or 'last' can also be specified.
 
   Example:
 
   .. code-block:: none
 
-    &target=summarize(counter.errors, "1hour") # errors per hour
+    &target=summarize(counter.errors, "1hour") # total errors per hour
     &target=summarize(nonNegativeDerivative(gauge.num_users), "1week") # new users per week
+    &target=summarize(queue.size, "1hour", "avg") # average queue size per hour
+    &target=summarize(queue.size, "1hour", "max") # maximum queue size during each hour
   """
   results = []
   delta = parseTimeOffset(intervalString)
@@ -1220,7 +1234,7 @@ def summarize(requestContext, seriesList, intervalString):
     datapoints = zip(timestamps, series)
 
     for (timestamp, value) in datapoints:
-      bucketInterval = timestamp - (timestamp % interval)
+      bucketInterval = int((timestamp - series.start) / interval)
 
       if bucketInterval not in buckets:
         buckets[bucketInterval] = []
@@ -1228,19 +1242,30 @@ def summarize(requestContext, seriesList, intervalString):
       if value is not None:
         buckets[bucketInterval].append(value)
 
-    newStart = series.start - (series.start % interval)
-    newEnd = series.end - (series.end % interval) + interval
+    newStart = series.start
+    newEnd = series.end
     newValues = []
-    for timestamp in range(newStart, newEnd, interval):
-      bucket = buckets.get(timestamp, [])
+    for timestamp in range( int(series.start), int(series.end), interval ):
+      newEnd = timestamp
+      bucketInterval = int((timestamp - series.start) / interval)
+      bucket = buckets.get(bucketInterval, [])
 
       if bucket:
-        newValues.append( sum(bucket) )
+        if func == 'avg':
+          newValues.append( float(sum(bucket)) / float(len(bucket)) )
+        elif func == 'last':
+          newValues.append( bucket[len(bucket)-1] )
+        elif func == 'max':
+          newValues.append( max(bucket) )
+        elif func == 'min':
+          newValues.append( min(bucket) )
+        else:
+          newValues.append( sum(bucket) )
       else:
         newValues.append( None )
 
     newName = "summarize(%s, \"%s\")" % (series.name, intervalString)
-    newSeries = TimeSeries(newName, newStart, newEnd, interval, newValues)
+    newSeries = TimeSeries(newName, newStart, newEnd + interval, interval, newValues)
     newSeries.pathExpression = newName
     results.append(newSeries)
 
